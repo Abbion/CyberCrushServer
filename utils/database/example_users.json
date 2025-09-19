@@ -1,0 +1,33 @@
+[
+    {
+        "username" : "Amadeus",
+        "password" : "Hexe4?",
+        "extra_data" : {
+            "job" : "wizzard",
+	    "race" : "orc",
+	    "sex" : "male",
+	    "gang" : "post fronst"
+        }
+    },
+    {
+        "username" : "Victor",
+        "password" : "R@tM@n1",
+        "extra_data" : {
+            "job" : "DJ",
+	    "race" : "elf",
+	    "gang" : "shadow rest",
+	    "addict" : true,
+	    "anger issues" : true
+        }
+    },
+    {
+        "username" : "Karma",
+        "password" : "LexSp3ll!",
+        "extra_data" : {
+            "job" : "dancer",
+	    "race" : "human",
+	    "blood curse" : true,
+	    "age" : 68
+        }
+    }
+]

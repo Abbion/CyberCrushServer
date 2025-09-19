@@ -8,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
+use sqlx::postgres::PgPoolOptions;
 
 #[derive(Debug, Deserialize)]
 struct LoginRequest {
@@ -23,6 +24,13 @@ struct LoginResponse {
 
 #[tokio::main]
 async fn main() {
+    let pool = PgPoolOptions::new()
+        .max_connections(3)
+        .connect("postgres://admin_user:secret@localhost/cc_game")
+        .await;
+
+    println!("Connected to postgres");
+
     let app = Router::new()
         .route("/", get(hello_world))
         .route("/login", post(login));
