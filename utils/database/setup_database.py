@@ -1,5 +1,6 @@
 import psycopg2
 from psycopg2 import sql
+import json
 
 DATABASE_NAME = ""
 DATABASE_USERNAME = ""
@@ -8,7 +9,7 @@ DATABASE_URL = ""
 DATABASE_PORT = 0
 
 def setup_configuration():
-    with open("../../server.conf", "r", encofing="utf-8") as file:
+    with open("../../server.conf", "r", encoding="utf-8") as file:
         global DATABASE_NAME, DATABASE_USERNAME, DATABASE_PASSWORD, DATABASE_URL, DATABASE_PORT
 
         config = json.load(file)
@@ -16,7 +17,7 @@ def setup_configuration():
         DATABASE_USERNAME = config["database_admin_username"]
         DATABASE_PASSWORD = config["database_admin_password"]
         DATABASE_URL = config["database_url"]
-        DATABASE_PROT = config["database_port"]
+        DATABASE_PORT = config["database_port"]
 
 def init_db():
     db_connection = psycopg2.connect(
@@ -27,7 +28,7 @@ def init_db():
             port = DATABASE_PORT)
     
     try:
-        db_cursor = connection.cursor()
+        db_cursor = db_connection.cursor()
 
         user_table_query = sql.SQL("""
             CREATE TABLE IF NOT EXISTS users (
@@ -35,7 +36,7 @@ def init_db():
                 username TEXT NOT NULL UNIQUE,
                 password TEXT NOT NULL,
                 user_token TEXT,
-                personal_number CHAR(4) UNIQUE,
+                personal_number INT NOT NULL UNIQUE,
                 extra_data JSONB
             );
             """)

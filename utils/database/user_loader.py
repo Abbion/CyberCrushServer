@@ -1,5 +1,6 @@
 import json
 import argparse
+import random
 from argon2 import PasswordHasher, exceptions
 import psycopg2
 from psycopg2.extras import Json
@@ -54,6 +55,12 @@ def validate_user(username: str, password: str, extra_data: str) -> bool:
 
     return True
 
+def generate_unique_personal_numbers(count: int) -> list[int]:
+    if count > 9000:
+        raise ValueError("Error: To many users. Cannot generate unique 4-digit codes.")
+
+    return random.sample(range(1000, 10000), count)
+
 def main():
     parser = argparse.ArgumentParser(description = "Loads user data to the database from .json file")
     parser.add_argument("-f", help = ".json file path")
@@ -78,13 +85,15 @@ def main():
                                          host = DATABASE_URL,
                                          port = DATABASE_PORT);
 
+    personal_numbers = generate_unique_personal_numbers(len(users))
+
     try:
         db_connection.autocommit = False
         db_cursor = db_connection.cursor()
 
         insert_sql = "INSERT INTO users (username, password, user_token, personal_number, extra_data) VALUES (%s, %s, %s, %s, %s) RETURNING id;"
 
-        for user in users:
+        for itr, user in enumerate(users):
             username = user["username"]
             password = user["password"]
             extra_data = user.get("extra_data", {})
@@ -93,7 +102,7 @@ def main():
                 continue
 
             hashed_password = hash_password(password, password_hasher)
-            insert_params = (username, hashed_password, None, None, Json(extra_data))
+            insert_params = (username, hashed_password, None, personal_numbers[itr], Json(extra_data))
 
             db_cursor.execute(insert_sql, insert_params)
             user_id = db_cursor.fetchone()[0]
