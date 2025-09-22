@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "cyber_crush_authentication_server",
+    "cyber_crush_data_server",
+    "shared_server_lib"
+]

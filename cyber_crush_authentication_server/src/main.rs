@@ -1,3 +1,5 @@
+use shared_server_lib::server_configurator::{ServerConfiguration, ServerType};
+
 use axum::{
     extract::{Json, State},
     response::IntoResponse,
@@ -6,7 +8,7 @@ use axum::{
 };
 
 use serde::{Deserialize, Serialize};
-use std::{fs, net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use argon2::{Argon2, PasswordHash, password_hash, PasswordVerifier};
@@ -26,53 +28,6 @@ struct LoginResponse {
     token: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct ServerConfiguration {
-    database_name: String,
-    database_admin_username: String,
-    database_admin_password: String,
-    database_url: String,
-    database_password_pepper: String,
-    server_address: String,
-    authentication_server_port: u16,
-}
-
-enum ServerType {
-    Authentication,
-    Data,
-    Bank,
-    Chat
-}
-
-impl ServerConfiguration {
-    fn get_posgres_connection_url(&self) -> String {
-        format!("postgres://{}:{}@{}/{}", self.database_admin_username, self.database_admin_password, self.database_url, self.database_name)
-    }
-
-    fn load() -> ServerConfiguration {
-        let configuration_data = fs::read_to_string("../server.conf").expect("Failed to load configuration data");
-        let server_config: ServerConfiguration = match serde_json::from_str(&configuration_data) {
-            Ok(config) => config,
-            Err(error) => {
-                panic!("Error: Reading server configuration failed: {}", error);
-            }
-        };
-
-        return server_config;
-    }
-
-    fn get_socket_addr(&self, server_type: ServerType) -> SocketAddr {
-        let addr_str = match server_type {
-            ServerType::Authentication => format!("{}:{}", self.server_address, self.authentication_server_port),
-            ServerType::Data => "".to_string(),
-            ServerType::Bank => "".to_string(),
-            ServerType::Chat => "".to_string(),
-        };
-
-        addr_str.parse().expect("Invalid ip address")
-    }
-}
-
 #[derive(Debug)]
 struct ServerState {
     pepper: String,
@@ -81,7 +36,7 @@ struct ServerState {
 
 #[tokio::main]
 async fn main() {
-    let server_configuration = ServerConfiguration::load();
+    let server_configuration = ServerConfiguration::load("../server.conf");
     let db_pool = connect_to_database(server_configuration.get_posgres_connection_url()).await;
     let server_state = Arc::new(ServerState{ pepper: server_configuration.database_password_pepper.clone(), db_pool });
     
