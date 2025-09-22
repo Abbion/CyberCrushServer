@@ -29,10 +29,19 @@ struct LoginResponse {
 #[derive(Debug, Deserialize)]
 struct ServerConfiguration {
     database_name: String,
-    database_admin_username : String,
-    database_admin_password : String,
-    database_url : String,
+    database_admin_username: String,
+    database_admin_password: String,
+    database_url: String,
     database_password_pepper: String,
+    server_address: String,
+    authentication_server_port: u16,
+}
+
+enum ServerType {
+    Authentication,
+    Data,
+    Bank,
+    Chat
 }
 
 impl ServerConfiguration {
@@ -42,7 +51,7 @@ impl ServerConfiguration {
 
     fn load() -> ServerConfiguration {
         let configuration_data = fs::read_to_string("../server.conf").expect("Failed to load configuration data");
-        let server_config : ServerConfiguration = match serde_json::from_str(&configuration_data) {
+        let server_config: ServerConfiguration = match serde_json::from_str(&configuration_data) {
             Ok(config) => config,
             Err(error) => {
                 panic!("Error: Reading server configuration failed: {}", error);
@@ -50,6 +59,17 @@ impl ServerConfiguration {
         };
 
         return server_config;
+    }
+
+    fn get_socket_addr(&self, server_type: ServerType) -> SocketAddr {
+        let addr_str = match server_type {
+            ServerType::Authentication => format!("{}:{}", self.server_address, self.authentication_server_port),
+            ServerType::Data => "".to_string(),
+            ServerType::Bank => "".to_string(),
+            ServerType::Chat => "".to_string(),
+        };
+
+        addr_str.parse().expect("Invalid ip address")
     }
 }
 
@@ -63,18 +83,17 @@ struct ServerState {
 async fn main() {
     let server_configuration = ServerConfiguration::load();
     let db_pool = connect_to_database(server_configuration.get_posgres_connection_url()).await;
-    let server_state = Arc::new(ServerState{ pepper: server_configuration.database_password_pepper, db_pool });
+    let server_state = Arc::new(ServerState{ pepper: server_configuration.database_password_pepper.clone(), db_pool });
+    
+    let socket_addr = server_configuration.get_socket_addr(ServerType::Authentication);
+    let listener = TcpListener::bind(socket_addr).await.unwrap();
+    println!("Server running at: {}", socket_addr);
 
     let app = Router::new()
         .route("/", get(hello_world))
         .route("/login", post(login))
         .with_state(server_state.clone());
 
-    let addr = SocketAddr::from(([0,0,0,0], 3000));
-    println!("Server running at: {}", addr);
-
-    let listener = TcpListener::bind(addr).await.unwrap();
-    
     axum::serve(listener, app).await.unwrap();
 }
 
