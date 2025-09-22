@@ -1,4 +1,4 @@
-use shared_server_lib::server_configurator::{ServerConfiguration, ServerType};
+use shared_server_lib::{server_configurator::{ServerConfiguration, ServerType}, server_database};
 
 use axum::{
     extract::{Json, State},
@@ -10,7 +10,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::PgPool;
 use argon2::{Argon2, PasswordHash, password_hash, PasswordVerifier};
 use rand::{TryRngCore, rngs::OsRng};
 use hex;
@@ -37,23 +37,23 @@ struct ServerState {
 #[tokio::main]
 async fn main() {
     let server_configuration = ServerConfiguration::load("../server.conf");
-    let db_pool = connect_to_database(server_configuration.get_posgres_connection_url()).await;
+    let db_pool = server_database::connect_to_database(server_configuration.get_posgres_connection_url()).await;
     let server_state = Arc::new(ServerState{ pepper: server_configuration.database_password_pepper.clone(), db_pool });
     
     let socket_addr = server_configuration.get_socket_addr(ServerType::Authentication);
     let listener = TcpListener::bind(socket_addr).await.unwrap();
-    println!("Server running at: {}", socket_addr);
+    println!("Authentication server running at: {}", socket_addr);
 
     let app = Router::new()
-        .route("/", get(hello_world))
+        .route("/", get(hello))
         .route("/login", post(login))
         .with_state(server_state.clone());
 
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn hello_world() -> &'static str {
-    "Hello, cyber crush!"
+async fn hello() -> &'static str {
+    "Hello, cyber crush authentication server!"
 }
 
 async fn login(State(state): State<Arc<ServerState>>, Json(payload): Json<LoginRequest>) -> impl IntoResponse {
@@ -102,23 +102,6 @@ async fn login(State(state): State<Arc<ServerState>>, Json(payload): Json<LoginR
     };
 
     Json(response)
-}
-
-async fn connect_to_database(db_url: String) -> PgPool {
-    let db_pool = PgPoolOptions::new()
-        .max_connections(3)
-        .connect(&db_url)
-        .await;
-
-    let db_pool = match db_pool {
-        Ok(pool) => pool,
-        Err(error) => {
-            panic!("Error: Server did not connect to the database: {}", error);
-        }
-    };
-
-    println!("Connected to postgres!");
-    return db_pool;
 }
 
 fn verify_password(stored_hash: &str, password: &str, pepper: &str) -> Result<bool, password_hash::Error> {

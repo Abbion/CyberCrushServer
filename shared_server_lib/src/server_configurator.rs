@@ -11,6 +11,7 @@ pub struct ServerConfiguration {
     pub database_password_pepper: String,
     server_address: String,
     authentication_server_port: u16,
+    data_server_port: u16,
 }
 
 pub enum ServerType {
@@ -40,7 +41,7 @@ impl ServerConfiguration {
     pub fn get_socket_addr(&self, server_type: ServerType) -> SocketAddr {
         let addr_str = match server_type {
             ServerType::Authentication => format!("{}:{}", self.server_address, self.authentication_server_port),
-            ServerType::Data => "".to_string(),
+            ServerType::Data => format!("{}:{}", self.server_address, self.data_server_port),
             ServerType::Bank => "".to_string(),
             ServerType::Chat => "".to_string(),
         };
