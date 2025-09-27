@@ -28,6 +28,17 @@ struct LoginResponse {
     token: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct ValidateTokenRequest {
+    token: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ValidateTokenResponse {
+    success: bool,
+    message: String
+}
+
 #[derive(Debug)]
 struct ServerState {
     pepper: String,
@@ -47,6 +58,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(hello))
         .route("/login", post(login))
+        .route("/validate_token", post(validate_token))
         .with_state(server_state.clone());
 
     axum::serve(listener, app).await.unwrap();
@@ -98,6 +110,28 @@ async fn login(State(state): State<Arc<ServerState>>, Json(payload): Json<LoginR
         Err(error) => {
             eprintln!("Error: Login failed for user: {}. Error: {}", payload.username, error);
             LoginResponse{ success: false, message: "Login database error.".into(), token: "".into() }
+        }
+    };
+
+    Json(response)
+}
+
+async fn validate_token(State(state): State<Arc<ServerState>>, Json(payload): Json<ValidateTokenRequest>) -> impl IntoResponse {
+    let token_validation_query = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE user_token = $1")
+        .bind(&payload.token)
+        .fetch_optional(&state.db_pool)
+        .await;
+    
+    let response = match token_validation_query {
+        Ok(Some(_)) => {
+                ValidateTokenResponse{ success: true, message: "success".into() }
+        },
+        Ok(None) => {
+            ValidateTokenResponse{ success: false, message: "Token not validated".into() }
+        },
+        Err(error) => {
+            eprintln!("Error: Failed to validate token {}: {}", payload.token, error);
+            ValidateTokenResponse{ success: false, message: "Token validation error.".into() }
         }
     };
 
