@@ -42,6 +42,38 @@ def init_db():
             """)
 
         db_cursor.execute(user_table_query)
+
+        bank_account_table_query = sql.SQL("""
+            CREATE TABLE IF NOT EXISTS bank_accounts (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                funds INTEGER NOT NULL
+            );
+            """)
+
+        db_cursor.execute(bank_account_table_query)
+
+        bank_transactions_table_query = sql.SQL("""
+            CREATE TABLE IF NOT EXISTS bank_transactions (
+                id SERIAL PRIMARY KEY,
+                sending_id INTEGER NOT NULL REFERENCES users(id),
+                receiving_id INTEGER NOT NULL REFERENCES users(id),
+                message TEXT NOT NULL,
+                transaction_amount INTEGER NOT NULL,
+                time_stamp TIMESTAMP NOT NULL DEFAULT NOW()
+
+            );
+        """)
+
+        db_cursor.execute(bank_transactions_table_query)
+        
+        # TODO ADD INDEXES to help with the queries
+        # Join on to get the usernames SELECT t.id, u1.username AS sender, u2.username AS receiver, 
+        # t.transaction_amount, t.time_stamp
+        # FROM bank_transactions t
+        # JOIN users u1 ON t.sending_id = u1.id
+        # JOIN users u2 ON t.receiving_id = u2.id;
+
         db_connection.commit()
     except Exception:
         if db_connection:
@@ -51,7 +83,7 @@ def init_db():
         if db_connection:
             db_cursor.close()
             db_connection.close()
-            print("User table created")
+            print("Script finished. State success!")
 
 if __name__ == "__main__":
     setup_configuration()

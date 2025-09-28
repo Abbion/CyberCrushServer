@@ -7,7 +7,14 @@
 	    "race" : "orc",
 	    "sex" : "male",
 	    "gang" : "post fronst"
-        }
+        },
+	"bank_account" : {
+	    "funds" : 1500
+	},
+	"bank_transactions" : [
+	    { "from" : "Victor", "message" : "blood donation", "amount" : 100, "time_stamp" : "2025-09-28 14:35:32" },
+	    { "to": "Karma", "message" : "pc parts", "amount": "750", "time_stamp" : "2025-09-30 17:42:12" }
+	]
     },
     {
         "username" : "Victor",
