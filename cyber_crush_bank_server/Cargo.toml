@@ -1,0 +1,10 @@
+[package]
+name = "cyber_crush_bank_server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+shared_server_lib = { path = "../shared_server_lib" }
+
+axum = "0.8.4"
+tokio = { version = "1.47.1", features = ["full"] }
