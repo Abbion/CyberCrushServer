@@ -121,7 +121,7 @@ async fn validate_token(State(state): State<Arc<ServerState>>, Json(payload): Js
         .bind(&payload.token)
         .fetch_optional(&state.db_pool)
         .await;
-    
+
     let response = match token_validation_query {
         Ok(Some(_)) => {
                 ValidateTokenResponse{ success: true, message: "success".into() }
