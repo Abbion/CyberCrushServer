@@ -86,27 +86,60 @@ def main():
                                          port = DATABASE_PORT);
 
     personal_numbers = generate_unique_personal_numbers(len(users))
+    username_to_bank_id = {}
 
     try:
         db_connection.autocommit = False
         db_cursor = db_connection.cursor()
 
-        insert_sql = "INSERT INTO users (username, password, user_token, personal_number, extra_data) VALUES (%s, %s, %s, %s, %s) RETURNING id;"
+        insert_user_sql = "INSERT INTO users (username, password, user_token, personal_number, extra_data) VALUES (%s, %s, %s, %s, %s) RETURNING id;"
+        insert_funds_sql = "INSERT INTO bank_accounts (user_id, funds) VALUES (%s, %s) RETURNING id;"
+        insert_bank_transaction_sql = "INSERT INTO bank_transactions (sending_id, receiving_id, message, transaction_amount, time_stamp) VALUES(%s, %s, %s, %s, %s);"
 
-        for itr, user in enumerate(users):
-            username = user["username"]
-            password = user["password"]
-            extra_data = user.get("extra_data", {})
+
+        for (itr, user_data) in enumerate(users):
+            username = user_data["username"]
+            password = user_data["password"]
+            extra_data = user_data.get("extra_data", {})
 
             if not validate_user(username, password, json.dumps(extra_data, ensure_ascii=False).encode("utf-8")):
                 continue
 
             hashed_password = hash_password(password, password_hasher)
-            insert_params = (username, hashed_password, None, personal_numbers[itr], Json(extra_data))
+            insert_user_params = (username, hashed_password, None, personal_numbers[itr], Json(extra_data))
 
-            db_cursor.execute(insert_sql, insert_params)
+            db_cursor.execute(insert_user_sql, insert_user_params)
             user_id = db_cursor.fetchone()[0]
-            print(f"Inserted user { username } as id { user_id }")
+
+            bank_account = user_data.get("bank_account", {})
+            funds = bank_account["funds"]
+
+            insert_funds_params = (user_id, funds)
+            db_cursor.execute(insert_funds_sql, insert_funds_params)
+            bank_account_id = db_cursor.fetchone()[0]
+
+            username_to_bank_id[username] = bank_account_id
+
+        #Insert bank transactions
+        for user_data in users:
+            username = user_data["username"]
+            sending_id = username_to_bank_id[username]
+
+            for bank_transaction in user_data["bank_transactions"]:
+                receiver_username = bank_transaction["receiver"]
+                receiving_id = username_to_bank_id.get(receiver_username)
+
+                if receiving_id is None:
+                    print(f"No receiver {receiver_username} bank account found!")
+                    continue
+                
+                transaction_amount = bank_transaction["amount"]
+                transaction_message = bank_transaction["message"]
+                transaction_time_stamp = bank_transaction["time_stamp"]
+
+                insert_bank_transaction_params = (sending_id, receiving_id, transaction_message, transaction_amount, transaction_time_stamp)
+
+                db_cursor.execute(insert_bank_transaction_sql, insert_bank_transaction_params)
 
         db_connection.commit()
     except Exception:
