@@ -4,7 +4,7 @@ This project was created to implement software-based user interactions for the *
 
 The servers are written in Rust using Tokio and Axum. On the database side, PostgreSQL was chosen. Python scripts run utility tools. For more information about each server or tool, navigate to the appropriate folder.
 
-For a top down view of the backend design, check out the UML files.
+For a top down view of the backend design, check out the [UML](https://docs.google.com/presentation/d/1cmE3bWP1Vk9hHbp4m8-NQ4mNjgj6wR9FLrjHONT2Y_I/edit?usp=sharing) files.
 
 ### Features
 Each feature is supported by its own dedicated server:
@@ -49,3 +49,4 @@ All the README and UML files will be frquently updated to reflect the present pr
 #### Future features
  - A setup script will be provided that handles the whole backend setup.
  - Docker setup.
+
