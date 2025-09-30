@@ -1,6 +1,6 @@
-# Cybercrush backend
+# CyberCrush backend
 ##### version: indev 0.1v
-This project was created to implement software-based user interactions for the **Cybercrush LARP** event. This repository only contains the backend of the project, the mobile app is available at ....
+This project was created to implement software-based user interactions for the **CyberCrush LARP** event. This repository only contains the backend of the project, the mobile app is available at [CyberCrushMobileApp](https://github.com/Abbion/CyberCrushMobileApp).
 
 The servers are written in Rust using Tokio and Axum. On the database side, PostgreSQL was chosen. Python scripts run utility tools. For more information about each server or tool, navigate to the appropriate folder.
 
@@ -32,6 +32,7 @@ Servers are independent of each other, so you can run them in any sequence. Just
 
 ## Contributing
 To contribute, create a new branch using the snake_case naming convention and create a pull request. You can also fork the project and create a pull request from that.
+
 
 ### Coding conventions
 To improve on the code review process please adhere to those rules:
