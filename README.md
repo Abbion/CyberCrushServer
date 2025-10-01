@@ -25,7 +25,7 @@ Make sure you have all of these tools installed:
 In the repository root folder, you will find a file called `server.conf`. This file holds important server/database configuration variables like ports or password pepper.
 
 #### Database
-Before running the servers, it is recommended to create the database tables and fill them with data. To do so, go to the `utils/database` and run the `setup_database.py` script (make sure you install all the required libraries. The `utls/database/README.md` covers those). After the tables are created, run the `user_loader.py script` with the flag `-f` and `example_users.json` as its argument. Go back to the repository root folder. There, find the `server.conf` file, in it, you will find the *database name, URL, admin username, and admin password*. Use those parameters to log in to the database and check the tables and their contents.
+Before running the servers, it is recommended to create the database tables and fill them with data. To do so, go to the `utils/database` and run the `setup_database.py` script (make sure you install all the required libraries. The `utls/database/README.md` covers those). After the tables were created, run the `user_loader.py script` with the flag `-f` and `example_users.json` as its argument. Go back to the repository root folder. There, find the `server.conf` file, in it, you will find the *database name, URL, admin username, and admin password*. Use those parameters to log in to the database and check the tables and their contents.
 
 #### Servers
 Servers are independent of each other, so you can run them in any sequence. Just enter the server folder and call `cargo run`.
@@ -49,4 +49,5 @@ All the README and UML files will be frquently updated to reflect the present pr
 #### Future features
  - A setup script will be provided that handles the whole backend setup.
  - Docker setup.
+
 
