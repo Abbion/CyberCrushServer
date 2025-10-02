@@ -75,25 +75,20 @@ async fn hello() -> &'static str {
 async fn get_user_data(State(state): State<Arc<ServerState>>, Json(payload): Json<GetUserDataRequest>) -> impl IntoResponse {
     #[derive(Debug, sqlx::FromRow)]
     struct UserDataQuery {
-        id: i32,
         username: String,
         personal_number: i32,
         extra_data: serde_json::Value,
     }
 
     let user_data_query = sqlx::query_as::<_, UserDataQuery>(
-        r#"SELECT id, username, personal_number, extra_data FROM users WHERE user_token = $1"#)
+        r#"SELECT username, personal_number, extra_data FROM users WHERE user_token = $1"#)
         .bind(&payload.token)
         .fetch_optional(&state.db_pool)
         .await;
     
     let response = match user_data_query {
-        Ok(user_data) => {
-            match user_data {
-                Some(raw_data) => GetUserDataResponse::success(raw_data.username, raw_data.personal_number.to_string(), raw_data.extra_data.to_string()),
-                None => GetUserDataResponse::fail("No user data found.")
-            }
-        },
+        Ok(Some(user_data)) => GetUserDataResponse::success(user_data.username, user_data.personal_number.to_string(), user_data.extra_data.to_string()),
+        Ok(None) => GetUserDataResponse::fail("No user data found."),
         Err(error) => {
             eprintln!("Error: Getting user data failed for token: {}. Error: {}", payload.token, error);
             GetUserDataResponse::fail("No user data found. Server error!")
@@ -104,14 +99,14 @@ async fn get_user_data(State(state): State<Arc<ServerState>>, Json(payload): Jso
 }
 
 async fn get_all_usernames(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
-    let rows: Result<Vec<(String,)>, sqlx::Error> = sqlx::query_as(
+    let all_usernames_query: Result<Vec<(String,)>, sqlx::Error> = sqlx::query_as(
         r#"SELECT username FROM users"#)
         .fetch_all(&state.db_pool)
         .await;
 
-    let response = match rows {
-        Ok(user_rows) => {
-            let usernames: Vec<String> = user_rows.into_iter().map(|(u,)| u).collect();
+    let response = match all_usernames_query {
+        Ok(all_usernames) => {
+            let usernames: Vec<String> = all_usernames.into_iter().map(|(u,)| u).collect();
             GetAllUsernamesResponse{ success: true, message: "success".into(), usernames }
         },
         Err(error) => {

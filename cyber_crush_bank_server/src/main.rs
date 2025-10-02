@@ -10,7 +10,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use chrono;
 
 #[derive(Debug, Deserialize)]
@@ -46,6 +46,20 @@ struct GetUserTransactionHistoryResponse {
     transactions: Vec<TransactionEntry>
 }
 
+#[derive(Debug, Deserialize)]
+struct TransferFundsRequest {
+    sender_token: String,
+    receiver_username: String,
+    message: String,
+    transaction_amount: i32
+}
+
+#[derive(Debug, Serialize)]
+struct TransferFundsResponse {
+    success: bool,
+    message: String
+}
+
 #[derive(Debug)]
 struct ServerState {
     db_pool: PgPool, //This is thread safe
@@ -66,6 +80,7 @@ async fn main() {
         .route("/hello", get(hello))
         .route("/get_user_funds", post(get_user_funds))
         .route("/get_user_transaction_history", post(get_user_transaction_history))
+        .route("/transfer_funds", post(transfer_funds))
         .with_state(server_state.clone());
 
     axum::serve(listener, app).await.unwrap();
@@ -76,21 +91,14 @@ async fn hello() -> &'static str {
 }
 
 async fn get_user_funds(State(state): State<Arc<ServerState>>, Json(payload): Json<GetUserFundsRequest>) -> impl IntoResponse   {
-    #[derive(Debug, sqlx::FromRow)]
-    struct FundsQuery {
-        funds: i32,
-    }
-
-    // b - bank account
-    // u - user
-    let funds_query = sqlx::query_as::<_, FundsQuery>(
+    let funds_query : Result<Option<i32>, sqlx::Error> = sqlx::query_scalar(
         r#"SELECT b.funds FROM bank_accounts b JOIN users u ON b.user_id = u.id WHERE u.user_token = $1"#)
         .bind(&payload.token)
         .fetch_optional(&state.db_pool)
         .await;
 
     let response = match funds_query {
-        Ok(Some(funds_data)) => GetUserFundsResponse { success: true, message: "success".into(), funds: funds_data.funds },
+        Ok(Some(funds)) => GetUserFundsResponse { success: true, message: "success".into(), funds },
         Ok(None) => GetUserFundsResponse { success: false, message: "No account found for this token".into(), funds: -1 },
         Err(error) => {
             eprintln!("Error: Getting user funds failed for token {} Error:{}", payload.token, error);
@@ -100,7 +108,6 @@ async fn get_user_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
 
     Json(response) 
 }
-
 
 async fn get_user_transaction_history(State(state): State<Arc<ServerState>>, Json(payload): Json<GetUserTransactionHistoryRequest>) -> impl IntoResponse {
     let transactions_query = sqlx::query_as::<_, TransactionEntry>(r#"
@@ -131,8 +138,164 @@ async fn get_user_transaction_history(State(state): State<Arc<ServerState>>, Jso
 
     Json(response)
 }
-/*
-async fn transfer_funds() -> &'static str {
-    "Transfer funds"
+
+async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Json<TransferFundsRequest>) -> impl IntoResponse {
+    #[derive(Debug, sqlx::FromRow)]
+    struct BankAccount {
+        id: i32,
+        funds: i32,
+    }
+
+    let sender_account_query = sqlx::query_as::<_, BankAccount>(
+     r#"
+        SELECT 
+            b.id,
+            b.funds
+        FROM bank_accounts b
+        JOIN users u ON b.user_id = u.id
+        WHERE u.user_token = $1
+    "#
+    )
+    .bind(&payload.sender_token)
+    .fetch_optional(&state.db_pool)
+    .await;
+    
+    let sender_account = match sender_account_query {
+        Ok(Some(account)) => account,
+        Ok(None) => {
+            return Json(TransferFundsResponse{ success: false, message: "No bank account found".into() });
+        },
+        Err(error) => {
+            eprintln!("Error: Transfering funds failed while getting sender account {}, Error: {}", payload.sender_token, error);
+            return Json(TransferFundsResponse{ success: false, message: "No bank account found. Server Error!".into()});
+        }
+    };
+
+    let receiver_account_query = sqlx::query_as::<_, BankAccount>(
+    r#"
+        SELECT 
+            b.id,
+            b.funds
+        FROM bank_accounts b
+        JOIN users u ON b.user_id = u.id
+        WHERE u.username = $1
+    "#
+    )
+    .bind(&payload.receiver_username)
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    let receiver_account = match receiver_account_query {
+        Ok(Some(account)) => account,
+        Ok(None) => {
+            return Json(TransferFundsResponse{ success: false, message: "Receiver not found".into() });
+        },
+        Err(error) => {
+            eprintln!("Error: Transfering funds failed while getting receiver account {}, Error: {}", payload.receiver_username, error);
+            return Json(TransferFundsResponse{ success: false, message: "No bank account found. Server Error!".into()});
+        }
+    };
+
+    let mut transaction: Transaction<'_, Postgres> = match state.db_pool.begin().await {
+        Ok(transaction) => transaction,
+        Err(error) => {
+            eprintln!("Error: Transfering funds failed while starting the transaction. Error: {}", error);
+            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 1!".into()});
+        }
+    };
+
+    let subtract_funds_query = sqlx::query(
+        r#"
+        UPDATE bank_accounts
+        SET funds = funds - $1
+        WHERE id = $2 AND funds > $1
+        "#)
+        .bind(payload.transaction_amount)
+        .bind(sender_account.id)
+        .execute(&mut *transaction)
+        .await;
+    
+    match subtract_funds_query {
+        Ok(result) => {
+            if result.rows_affected() == 0 {
+                return Json(TransferFundsResponse{ success: false, message: "Not enouch funds".into()});
+            }
+            if result.rows_affected() != 1 {
+                eprintln!("Error: Transfering funds failed too may rows affected while subtracting funds!");
+                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+            }
+        }
+        Err(error) => {
+            eprintln!("Error: Transfering funds failed while subtracting funds. Error: {}", error);
+            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+        }
+    };
+
+    let add_funds_query = sqlx::query(
+        r#"
+        UPDATE bank_accounts
+        SET funds = funds + $1
+        WHERE id = $2
+        "#)
+        .bind(payload.transaction_amount)
+        .bind(receiver_account.id)
+        .execute(&mut *transaction)
+        .await;
+
+    match add_funds_query {
+        Ok(result) => {
+            if result.rows_affected() == 0 {
+                return Json(TransferFundsResponse{ success: false, message: "Receiver not found".into()});
+            }
+            if result.rows_affected() != 1 {
+                eprintln!("Error: Transfering funds failed too may rows affected while adding funds!");
+                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+            }
+        }
+        Err(error) => {
+            eprintln!("Error: Transfering funds failed while adding funds. Error: {}", error);
+            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 2!".into()});
+        }    
+    };
+
+    let create_transaction_query = sqlx::query(
+        r#"
+        INSERT INTO bank_transactions
+        (sending_id, receiving_id, message, transaction_amount, time_stamp)
+        VALUES ($1, $2, $3, $4, NOW())
+        "#
+        )
+        .bind(sender_account.id)
+        .bind(receiver_account.id)
+        .bind(payload.message)
+        .bind(payload.transaction_amount)
+        .execute(&mut *transaction)
+        .await;
+
+    println!("ctq: {:?}", create_transaction_query);
+
+    match create_transaction_query {
+        Ok(result) => {
+            if result.rows_affected() == 0 {
+                return Json(TransferFundsResponse{ success: false, message: "Receiver not found".into()});
+            }
+            if result.rows_affected() != 1 {
+                eprintln!("Error: Transfering funds failed too may rows affected while inserting transaction!");
+                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+            }
+        }
+        Err(error) => {
+            eprintln!("Error: Transfering funds failed while inserting transaction. Error: {}", error);
+            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+        }    
+    };
+
+    let commited_transaction = transaction.commit().await;
+
+    if commited_transaction.is_err() {
+       eprintln!("Error: Transfering funds failed while commiting transaction. Error: {}", commited_transaction.unwrap_err());
+        return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+    }
+
+    Json(TransferFundsResponse{ success: true, message: "success".into()})
 }
-*/
