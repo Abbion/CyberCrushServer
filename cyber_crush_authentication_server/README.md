@@ -4,7 +4,7 @@ The authorization server handles login requests, verifies credentials, and gener
 
 This app uses token-based authentication, meaning each `POST` request must include a valid user token that uniquely identifies the user.
 
-This server connects to a PostgreSQL database and requires proper configuration through `server.conf`.
+This server connects to a PostgreSQL database and requires proper configuration through `server.conf` in the root repsitory.
 
 ## Endpoints
 
