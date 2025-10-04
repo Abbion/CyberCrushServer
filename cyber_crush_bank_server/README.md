@@ -1,4 +1,4 @@
-#Banking Server
+# Banking Server
 
 The banking server handles banking transactions, transaction history, and user funds.
 
@@ -6,14 +6,14 @@ This app uses token-based authentication, meaning each POST request must include
 
 This server connects to a PostgreSQL database and requires proper configuration through server.conf in the root repository.
 
-##Endpoints
-###**GET** `/hello`
+## Endpoints
+### **GET** `/hello`
 
 Description: Returns "Hello, cyber crush bank server!".
 
 Use case: Simple ping to check if the server is running.
 
-###**POST** `/get_user_funds`
+### **POST** `/get_user_funds`
 
 - Input:
     ```json
