@@ -32,10 +32,10 @@ struct GetUserTransactionHistoryRequest {
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 struct TransactionEntry {
-    sending_username: String,
-    receiving_username: String,
+    sender_username: String,
+    receiver_username: String,
     message: String,
-    transaction_amount: i32,
+    amount: i32,
     time_stamp: chrono::NaiveDateTime
 }
 
@@ -51,7 +51,7 @@ struct TransferFundsRequest {
     sender_token: String,
     receiver_username: String,
     message: String,
-    transaction_amount: i32
+    amount: i32
 }
 
 #[derive(Debug, Serialize)]
@@ -92,10 +92,14 @@ async fn hello() -> &'static str {
 
 async fn get_user_funds(State(state): State<Arc<ServerState>>, Json(payload): Json<GetUserFundsRequest>) -> impl IntoResponse   {
     let funds_query : Result<Option<i32>, sqlx::Error> = sqlx::query_scalar(
-        r#"SELECT b.funds FROM bank_accounts b JOIN users u ON b.user_id = u.id WHERE u.user_token = $1"#)
-        .bind(&payload.token)
-        .fetch_optional(&state.db_pool)
-        .await;
+    r#"
+        SELECT b.funds FROM bank_accounts b
+        JOIN users u ON b.user_id = u.id
+        WHERE u.user_token = $1
+    "#)
+    .bind(&payload.token)
+    .fetch_optional(&state.db_pool)
+    .await;
 
     let response = match funds_query {
         Ok(Some(funds)) => GetUserFundsResponse { success: true, message: "success".into(), funds },
@@ -110,23 +114,25 @@ async fn get_user_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
 }
 
 async fn get_user_transaction_history(State(state): State<Arc<ServerState>>, Json(payload): Json<GetUserTransactionHistoryRequest>) -> impl IntoResponse {
-    let transactions_query = sqlx::query_as::<_, TransactionEntry>(r#"
+    let transactions_query = sqlx::query_as::<_, TransactionEntry>(
+    r#"
         SELECT 
-            sender.username AS sending_username,
-            receiver.username AS receiving_username,
+            sender.username AS sender_username,
+            receiver.username AS receiver_username,
             t.message,
-            t.transaction_amount,
+            t.amount,
             t.time_stamp
         FROM bank_transactions t
-        JOIN bank_accounts sender_acc ON t.sending_id = sender_acc.id
+        JOIN bank_accounts sender_acc ON t.sender_id = sender_acc.id
         JOIN users sender ON sender_acc.user_id = sender.id
-        JOIN bank_accounts receiver_acc ON t.receiving_id = receiver_acc.id
+        JOIN bank_accounts receiver_acc ON t.receiver_id = receiver_acc.id
         JOIN users receiver ON receiver_acc.user_id = receiver.id
         WHERE sender.user_token = $1 OR receiver.user_token = $1
-        ORDER BY t.time_stamp DESC;"#)
-        .bind(&payload.token)
-        .fetch_all(&state.db_pool)
-        .await;
+        ORDER BY t.time_stamp DESC;
+    "#)
+    .bind(&payload.token)
+    .fetch_all(&state.db_pool)
+    .await;
    
     let response = match transactions_query {
         Ok(transactions) => GetUserTransactionHistoryResponse { success: true, message: "success".into(), transactions },
@@ -142,15 +148,14 @@ async fn get_user_transaction_history(State(state): State<Arc<ServerState>>, Jso
 async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Json<TransferFundsRequest>) -> impl IntoResponse {
     #[derive(Debug, sqlx::FromRow)]
     struct BankAccount {
-        id: i32,
-        funds: i32,
+        id: i32
     }
-
+    
+    // Retreive sender account by token
     let sender_account_query = sqlx::query_as::<_, BankAccount>(
      r#"
         SELECT 
-            b.id,
-            b.funds
+            b.id
         FROM bank_accounts b
         JOIN users u ON b.user_id = u.id
         WHERE u.user_token = $1
@@ -167,15 +172,15 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
         },
         Err(error) => {
             eprintln!("Error: Transfering funds failed while getting sender account {}, Error: {}", payload.sender_token, error);
-            return Json(TransferFundsResponse{ success: false, message: "No bank account found. Server Error!".into()});
+            return Json(TransferFundsResponse{ success: false, message: "No bank account found(sender). Server Error!".into()});
         }
     };
-
+    
+    // Retrieve receiver account by username
     let receiver_account_query = sqlx::query_as::<_, BankAccount>(
     r#"
         SELECT 
-            b.id,
-            b.funds
+            b.id
         FROM bank_accounts b
         JOIN users u ON b.user_id = u.id
         WHERE u.username = $1
@@ -192,7 +197,7 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
         },
         Err(error) => {
             eprintln!("Error: Transfering funds failed while getting receiver account {}, Error: {}", payload.receiver_username, error);
-            return Json(TransferFundsResponse{ success: false, message: "No bank account found. Server Error!".into()});
+            return Json(TransferFundsResponse{ success: false, message: "No bank account found(receiver). Server Error!".into()});
         }
     };
 
@@ -205,15 +210,15 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
     };
 
     let subtract_funds_query = sqlx::query(
-        r#"
+    r#"
         UPDATE bank_accounts
         SET funds = funds - $1
         WHERE id = $2 AND funds > $1
-        "#)
-        .bind(payload.transaction_amount)
-        .bind(sender_account.id)
-        .execute(&mut *transaction)
-        .await;
+    "#)
+    .bind(payload.amount)
+    .bind(sender_account.id)
+    .execute(&mut *transaction)
+    .await;
     
     match subtract_funds_query {
         Ok(result) => {
@@ -222,25 +227,25 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
             }
             if result.rows_affected() != 1 {
                 eprintln!("Error: Transfering funds failed too may rows affected while subtracting funds!");
-                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 2!".into()});
             }
         }
         Err(error) => {
             eprintln!("Error: Transfering funds failed while subtracting funds. Error: {}", error);
-            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 3!".into()});
         }
     };
 
     let add_funds_query = sqlx::query(
-        r#"
+    r#"
         UPDATE bank_accounts
         SET funds = funds + $1
         WHERE id = $2
-        "#)
-        .bind(payload.transaction_amount)
-        .bind(receiver_account.id)
-        .execute(&mut *transaction)
-        .await;
+    "#)
+    .bind(payload.amount)
+    .bind(receiver_account.id)
+    .execute(&mut *transaction)
+    .await;
 
     match add_funds_query {
         Ok(result) => {
@@ -249,30 +254,27 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
             }
             if result.rows_affected() != 1 {
                 eprintln!("Error: Transfering funds failed too may rows affected while adding funds!");
-                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 4!".into()});
             }
         }
         Err(error) => {
             eprintln!("Error: Transfering funds failed while adding funds. Error: {}", error);
-            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 2!".into()});
+            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 5!".into()});
         }    
     };
 
     let create_transaction_query = sqlx::query(
-        r#"
+    r#"
         INSERT INTO bank_transactions
-        (sending_id, receiving_id, message, transaction_amount, time_stamp)
+        (sender_id, receiver_id, message, amount, time_stamp)
         VALUES ($1, $2, $3, $4, NOW())
-        "#
-        )
-        .bind(sender_account.id)
-        .bind(receiver_account.id)
-        .bind(payload.message)
-        .bind(payload.transaction_amount)
-        .execute(&mut *transaction)
-        .await;
-
-    println!("ctq: {:?}", create_transaction_query);
+    "#)
+    .bind(sender_account.id)
+    .bind(receiver_account.id)
+    .bind(payload.message)
+    .bind(payload.amount)
+    .execute(&mut *transaction)
+    .await;
 
     match create_transaction_query {
         Ok(result) => {
@@ -281,12 +283,12 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
             }
             if result.rows_affected() != 1 {
                 eprintln!("Error: Transfering funds failed too may rows affected while inserting transaction!");
-                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 6!".into()});
             }
         }
         Err(error) => {
             eprintln!("Error: Transfering funds failed while inserting transaction. Error: {}", error);
-            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 7!".into()});
         }    
     };
 
@@ -294,7 +296,7 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
 
     if commited_transaction.is_err() {
        eprintln!("Error: Transfering funds failed while commiting transaction. Error: {}", commited_transaction.unwrap_err());
-        return Json(TransferFundsResponse{ success: false, message: "Internal server Error: !".into()});
+        return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 8!".into()});
     }
 
     Json(TransferFundsResponse{ success: true, message: "success".into()})
