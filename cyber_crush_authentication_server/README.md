@@ -24,7 +24,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Output**
     ```json
     {
-      "success": true/false,
+      "success": "true/false",
       "message": "string",
       "token": "string (if success)"
     }
@@ -41,7 +41,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Output**
     ```json
     {
-      "success": true/false
+      "success": "true/false",
       "message": "string"
     }
 - **Description**
