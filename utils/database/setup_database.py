@@ -56,10 +56,10 @@ def init_db():
         bank_transactions_table_query = sql.SQL("""
             CREATE TABLE IF NOT EXISTS bank_transactions (
                 id SERIAL PRIMARY KEY,
-                sending_id INTEGER NOT NULL REFERENCES bank_accounts(id),
-                receiving_id INTEGER NOT NULL REFERENCES bank_accounts(id),
+                sender_id INTEGER NOT NULL REFERENCES bank_accounts(id),
+                receiver_id INTEGER NOT NULL REFERENCES bank_accounts(id),
                 message TEXT NOT NULL,
-                transaction_amount INTEGER NOT NULL,
+                amount INTEGER NOT NULL,
                 time_stamp TIMESTAMP NOT NULL DEFAULT NOW()
 
             );
