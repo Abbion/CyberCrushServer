@@ -20,7 +20,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Output:**
   ```json
   {
-    "success": true/false,
+    "success": "true/false",
     "message": "string",
     "usernames": ["string", "string", "..."]
   }
@@ -37,7 +37,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Output**
   ```json
   {
-    "success": true/false,
+    "success": "true/false",
     "message": "string",
     "username": "string",
     "personal_number": "string",
