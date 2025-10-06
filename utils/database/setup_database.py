@@ -56,10 +56,10 @@ def init_db():
         bank_transactions_table_query = sql.SQL("""
             CREATE TABLE IF NOT EXISTS bank_transactions (
                 id SERIAL PRIMARY KEY,
-                sending_id INTEGER NOT NULL REFERENCES users(id),
-                receiving_id INTEGER NOT NULL REFERENCES users(id),
+                sender_id INTEGER NOT NULL REFERENCES bank_accounts(id),
+                receiver_id INTEGER NOT NULL REFERENCES bank_accounts(id),
                 message TEXT NOT NULL,
-                transaction_amount INTEGER NOT NULL,
+                amount INTEGER NOT NULL,
                 time_stamp TIMESTAMP NOT NULL DEFAULT NOW()
 
             );
@@ -67,6 +67,12 @@ def init_db():
 
         db_cursor.execute(bank_transactions_table_query)
         
+        bank_account_id_to_user_id_index = sql.SQL("""
+            CREATE INDEX index_bank_accounts_user_id ON bank_accounts(user_id);
+        """)
+
+        db_cursor.execute(bank_account_id_to_user_id_index)
+
         # TODO ADD INDEXES to help with the queries
         # Join on to get the usernames SELECT t.id, u1.username AS sender, u2.username AS receiver, 
         # t.transaction_amount, t.time_stamp

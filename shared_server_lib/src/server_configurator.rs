@@ -12,6 +12,7 @@ pub struct ServerConfiguration {
     server_address: String,
     authentication_server_port: u16,
     data_server_port: u16,
+    bank_server_port: u16
 }
 
 pub enum ServerType {
@@ -42,7 +43,7 @@ impl ServerConfiguration {
         let addr_str = match server_type {
             ServerType::Authentication => format!("{}:{}", self.server_address, self.authentication_server_port),
             ServerType::Data => format!("{}:{}", self.server_address, self.data_server_port),
-            ServerType::Bank => "".to_string(),
+            ServerType::Bank => format!("{}:{}", self.server_address, self.bank_server_port),
             ServerType::Chat => "".to_string(),
         };
 
