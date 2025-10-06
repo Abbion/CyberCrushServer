@@ -94,7 +94,7 @@ def main():
 
         insert_user_sql = "INSERT INTO users (username, password, user_token, personal_number, extra_data) VALUES (%s, %s, %s, %s, %s) RETURNING id;"
         insert_funds_sql = "INSERT INTO bank_accounts (user_id, funds) VALUES (%s, %s) RETURNING id;"
-        insert_bank_transaction_sql = "INSERT INTO bank_transactions (sending_id, receiving_id, message, transaction_amount, time_stamp) VALUES(%s, %s, %s, %s, %s);"
+        insert_bank_transaction_sql = "INSERT INTO bank_transactions (sender_id, receiver_id, message, amount, time_stamp) VALUES(%s, %s, %s, %s, %s);"
 
 
         for (itr, user_data) in enumerate(users):
@@ -123,21 +123,21 @@ def main():
         #Insert bank transactions
         for user_data in users:
             username = user_data["username"]
-            sending_id = username_to_bank_id[username]
+            sender_id = username_to_bank_id[username]
 
             for bank_transaction in user_data["bank_transactions"]:
                 receiver_username = bank_transaction["receiver"]
-                receiving_id = username_to_bank_id.get(receiver_username)
+                receiver_id = username_to_bank_id.get(receiver_username)
 
-                if receiving_id is None:
+                if receiver_id is None:
                     print(f"No receiver {receiver_username} bank account found!")
                     continue
                 
-                transaction_amount = bank_transaction["amount"]
+                amount = bank_transaction["amount"]
                 transaction_message = bank_transaction["message"]
                 transaction_time_stamp = bank_transaction["time_stamp"]
 
-                insert_bank_transaction_params = (sending_id, receiving_id, transaction_message, transaction_amount, transaction_time_stamp)
+                insert_bank_transaction_params = (sender_id, receiver_id, transaction_message, amount, transaction_time_stamp)
 
                 db_cursor.execute(insert_bank_transaction_sql, insert_bank_transaction_params)
 
