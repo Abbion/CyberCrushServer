@@ -68,10 +68,41 @@ def init_db():
         db_cursor.execute(bank_transactions_table_query)
         
         bank_account_id_to_user_id_index = sql.SQL("""
-            CREATE INDEX index_bank_accounts_user_id ON bank_accounts(user_id);
+            CREATE INDEX IF NOT EXISTS index_bank_accounts_user_id ON bank_accounts(user_id);
         """)
 
         db_cursor.execute(bank_account_id_to_user_id_index)
+
+        direct_chats_table_query = sql.SQL("""
+            CREATE TABLE IF NOT EXISTS direct_chats (
+                id SERIAL PRIMARY KEY,
+                user_a_id INTEGER NOT NULL REFERENCES users(id),
+                user_b_id INTEGER NOT NULL REFERENCES users(id),
+                last_message TEXT,
+                last_message_time_stamp TIMESTAMP,
+                CONSTRAINT unique_chat_pair UNIQUE(user_a_id, user_b_id)
+            );
+        """)
+
+        db_cursor.execute(direct_chats_table_query)
+
+        messages_table_query = sql.SQL("""
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id SERIAL PRIMARY KEY,
+                chat_id INTEGER NOT NULL REFERENCES direct_chats(id),
+                sender_id INTEGER NOT NULL REFERENCES users(id),
+                message TEXT NOT NULL,
+                time_stamp TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+        """)
+
+        db_cursor.execute(messages_table_query);
+
+        index_chat_messages_chat_id_timestamp = sql.SQL("""
+            CREATE INDEX IF NOT EXISTS index_messages_chat_id_timestamp ON chat_messages(chat_id, time_stamp DESC);
+        """)
+
+        db_cursor.execute(index_chat_messages_chat_id_timestamp);
 
         # TODO ADD INDEXES to help with the queries
         # Join on to get the usernames SELECT t.id, u1.username AS sender, u2.username AS receiver, 
