@@ -14,7 +14,7 @@
 	"bank_transactions" : [
 	    { "receiver" : "Karma", "message" : "pc parts", "amount": 750, "time_stamp" : "2025-09-30 17:42:12" }
 	],
-	"direct_chats": [
+	"direct_messages": [
 	    { "receiver" : "Karma", "message" : "Got your stuff, where are you?", "time_stamp" : "2025-10-04 13:12:20" },
 	    { "receiver" : "Karma", "message" : "No", "time_stamp" : "2025-10-04 13:16:31" },
 	    { "receiver" : "Karma", "message" : "First send me the money", "time_stamp" : "2025-10-04 13:16:42" },
@@ -37,7 +37,7 @@
 	"bank_transactions" : [
 	    { "receiver" : "Amadeus", "message" : "dj-set fix", "amount": 300, "time_stamp": "2025-10-03 12:34:08" }
 	],
-	"direct_chats" : [
+	"direct_messages" : [
 	]
     },
     {
@@ -55,7 +55,7 @@
 	"bank_transactions" : [
 	    { "receiver" : "Amadeus", "message" : "cracked software", "amount": 250, "time_stamp" : "2025-10-04 13:17:04" }
     	],
-	"direct_chats": [
+	"direct_messages": [
 	    { "receiver" : "Amadeus", "message" : "Leave it in the pot", "time_stamp" : "2025-10-04 13:15:42" },
 	    { "receiver" : "Amadeus", "message" : "Tomorrow I will send you the money", "time_stamp" : "2025-10-04 13:16:01" },
 	    { "receiver" : "Amadeus", "message" : "Fuck you", "time_stamp" : "2025-10-04 13:18:13" },

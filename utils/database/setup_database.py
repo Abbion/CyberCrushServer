@@ -87,7 +87,7 @@ def init_db():
         db_cursor.execute(direct_chats_table_query)
 
         messages_table_query = sql.SQL("""
-            CREATE TABLE IF NOT EXISTS chat_messages (
+            CREATE TABLE IF NOT EXISTS direct_chat_messages (
                 id SERIAL PRIMARY KEY,
                 chat_id INTEGER NOT NULL REFERENCES direct_chats(id),
                 sender_id INTEGER NOT NULL REFERENCES users(id),
@@ -99,7 +99,7 @@ def init_db():
         db_cursor.execute(messages_table_query);
 
         index_chat_messages_chat_id_timestamp = sql.SQL("""
-            CREATE INDEX IF NOT EXISTS index_messages_chat_id_timestamp ON chat_messages(chat_id, time_stamp DESC);
+            CREATE INDEX IF NOT EXISTS index_messages_chat_id_timestamp ON direct_chat_messages(chat_id, time_stamp DESC);
         """)
 
         db_cursor.execute(index_chat_messages_chat_id_timestamp);

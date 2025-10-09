@@ -3,6 +3,7 @@ import argparse
 import random
 from argon2 import PasswordHasher, exceptions
 import psycopg2
+from psycopg2 import sql
 from psycopg2.extras import Json
 
 PEPPER = ""
@@ -87,6 +88,8 @@ def main():
 
     personal_numbers = generate_unique_personal_numbers(len(users))
     username_to_bank_id = {}
+    username_to_id = {}
+    user_pair_to_direct_chat_id = {}
 
     try:
         db_connection.autocommit = False
@@ -95,8 +98,9 @@ def main():
         insert_user_sql = "INSERT INTO users (username, password, user_token, personal_number, extra_data) VALUES (%s, %s, %s, %s, %s) RETURNING id;"
         insert_funds_sql = "INSERT INTO bank_accounts (user_id, funds) VALUES (%s, %s) RETURNING id;"
         insert_bank_transaction_sql = "INSERT INTO bank_transactions (sender_id, receiver_id, message, amount, time_stamp) VALUES(%s, %s, %s, %s, %s);"
-
-
+        insert_direct_chat_sql = "INSERT INTO direct_chats (user_a_id, user_b_id, last_message, last_message_time_stamp) VALUES(%s, %s, %s, %s) ON CONFLICT (user_a_id, user_b_id) DO NOTHING RETURNING id;"
+        inset_direct_message_sql = "INSERT INTO direct_chat_messages (chat_id, sender_id, message, time_stamp) VALUES (%s, %s, %s, %s);"
+        
         for (itr, user_data) in enumerate(users):
             username = user_data["username"]
             password = user_data["password"]
@@ -110,6 +114,7 @@ def main():
 
             db_cursor.execute(insert_user_sql, insert_user_params)
             user_id = db_cursor.fetchone()[0]
+            username_to_id[username] = user_id
 
             bank_account = user_data.get("bank_account", {})
             funds = bank_account["funds"]
@@ -140,6 +145,54 @@ def main():
                 insert_bank_transaction_params = (sender_id, receiver_id, transaction_message, amount, transaction_time_stamp)
 
                 db_cursor.execute(insert_bank_transaction_sql, insert_bank_transaction_params)
+        
+        #Direct chats
+        for user_data in users:
+            username = user_data["username"]
+            sender_id = username_to_id[username]
+            receivers = set()
+            direct_messages = user_data["direct_messages"]
+
+            for message in direct_messages:
+                receiver = message["receiver"]
+                receiver_id = username_to_id[receiver]
+                
+                min_id = min(sender_id, receiver_id)
+                max_id = max(sender_id, receiver_id)
+                
+                insert_direct_chat_params = (min_id, max_id, "Not init", "2025-01-01 00:00:00")
+                db_cursor.execute(insert_direct_chat_sql, insert_direct_chat_params)
+                direct_chat_id = db_cursor.fetchone()
+                chat_user_pair = f"{min_id}+{max_id}"
+                
+                if direct_chat_id != None:
+                    user_pair_to_direct_chat_id[chat_user_pair] = direct_chat_id[0]
+
+                direct_chat_id = user_pair_to_direct_chat_id[chat_user_pair]               
+                message_content = message["message"]
+                time_stamp = message["time_stamp"]
+                insert_direct_message_params = (direct_chat_id, sender_id, message_content, time_stamp)
+                db_cursor.execute(inset_direct_message_sql, insert_direct_message_params)
+        
+        
+        #Update last message and last message time stamp in direct chat
+        update_last_message_and_time_stamp_sql = sql.SQL("""
+            UPDATE direct_chats AS dc
+            SET
+                last_message = dm.message,
+                last_message_time_stamp = dm.time_stamp
+            FROM (
+                SELECT DISTINCT ON (chat_id)
+                    chat_id,
+                    message,
+                    time_stamp
+                FROM direct_chat_messages
+                ORDER BY chat_id, time_stamp DESC
+            ) AS dm
+            WHERE dc.id = dm.chat_id
+        """)
+
+        db_cursor.execute(update_last_message_and_time_stamp_sql)
 
         db_connection.commit()
     except Exception:
