@@ -1,4 +1,4 @@
-use shared_server_lib::{server_configurator::{ServerConfiguration, ServerType}, server_database};
+use shared_server_lib::{server_configurator::{ServerConfiguration, ServerType}, server_database, common::ResponseStatus};
 
 use axum::{
     extract::{Json, State},
@@ -20,8 +20,7 @@ struct GetUserFundsRequest {
 
 #[derive(Debug, Serialize)]
 struct GetUserFundsResponse {
-    success: bool,
-    message: String,
+    response_status: ResponseStatus,
     funds: i32
 }
 
@@ -41,8 +40,7 @@ struct TransactionEntry {
 
 #[derive(Debug, Serialize)]
 struct GetUserTransactionHistoryResponse {
-    success: bool,
-    message: String,
+    response_status: ResponseStatus,
     transactions: Vec<TransactionEntry>
 }
 
@@ -54,11 +52,7 @@ struct TransferFundsRequest {
     amount: i32
 }
 
-#[derive(Debug, Serialize)]
-struct TransferFundsResponse {
-    success: bool,
-    message: String
-}
+use ResponseStatus as TransferFundsResponse;
 
 #[derive(Debug)]
 struct ServerState {
@@ -102,11 +96,11 @@ async fn get_user_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
     .await;
 
     let response = match funds_query {
-        Ok(Some(funds)) => GetUserFundsResponse { success: true, message: "success".into(), funds },
-        Ok(None) => GetUserFundsResponse { success: false, message: "No account found for this token".into(), funds: -1 },
+        Ok(Some(funds)) => GetUserFundsResponse{ response_status: ResponseStatus::success(), funds },
+        Ok(None) => GetUserFundsResponse{ response_status: ResponseStatus::fail("No account found for this token".into()), funds: -1 },
         Err(error) => {
             eprintln!("Error: Getting user funds failed for token {} Error:{}", payload.token, error);
-            GetUserFundsResponse { success: false, message: "No funds found. Server error!".into(), funds: -1 }
+            GetUserFundsResponse{ response_status: ResponseStatus::fail("No funds found. Server error!".into()), funds: -1 }
         }
     };
 
@@ -135,10 +129,10 @@ async fn get_user_transaction_history(State(state): State<Arc<ServerState>>, Jso
     .await;
    
     let response = match transactions_query {
-        Ok(transactions) => GetUserTransactionHistoryResponse { success: true, message: "success".into(), transactions },
+        Ok(transactions) => GetUserTransactionHistoryResponse{ response_status: ResponseStatus::success(), transactions },
         Err(error) => {
             eprintln!("Error: Getting user transaction history failed for token {} Error: {}", payload.token, error);
-            GetUserTransactionHistoryResponse { success: false, message: "No transaction found. Server error!".into(), transactions: vec![] }
+            GetUserTransactionHistoryResponse{ response_status: ResponseStatus::fail("No transaction found. Server error!".into()), transactions: vec![] }
         }
     };
 
@@ -168,11 +162,11 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
     let sender_account = match sender_account_query {
         Ok(Some(account)) => account,
         Ok(None) => {
-            return Json(TransferFundsResponse{ success: false, message: "No bank account found".into() });
+            return Json(TransferFundsResponse::fail("No bank account found".into()));
         },
         Err(error) => {
             eprintln!("Error: Transfering funds failed while getting sender account {}, Error: {}", payload.sender_token, error);
-            return Json(TransferFundsResponse{ success: false, message: "No bank account found(sender). Server Error!".into()});
+            return Json(TransferFundsResponse::fail("No bank account found(sender). Server Error!".into()));
         }
     };
     
@@ -193,11 +187,11 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
     let receiver_account = match receiver_account_query {
         Ok(Some(account)) => account,
         Ok(None) => {
-            return Json(TransferFundsResponse{ success: false, message: "Receiver not found".into() });
+            return Json(TransferFundsResponse::fail("Receiver not found".into()));
         },
         Err(error) => {
             eprintln!("Error: Transfering funds failed while getting receiver account {}, Error: {}", payload.receiver_username, error);
-            return Json(TransferFundsResponse{ success: false, message: "No bank account found(receiver). Server Error!".into()});
+            return Json(TransferFundsResponse::fail("No bank account found(receiver). Server Error!".into()));
         }
     };
 
@@ -205,7 +199,7 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
         Ok(transaction) => transaction,
         Err(error) => {
             eprintln!("Error: Transfering funds failed while starting the transaction. Error: {}", error);
-            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 1!".into()});
+            return Json(TransferFundsResponse::fail("Internal server Error: 1!".into()));
         }
     };
 
@@ -223,16 +217,16 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
     match subtract_funds_query {
         Ok(result) => {
             if result.rows_affected() == 0 {
-                return Json(TransferFundsResponse{ success: false, message: "Not enouch funds".into()});
+                return Json(TransferFundsResponse::fail("Not enouch funds".into()));
             }
             if result.rows_affected() != 1 {
                 eprintln!("Error: Transfering funds failed too may rows affected while subtracting funds!");
-                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 2!".into()});
+                return Json(TransferFundsResponse::fail("Internal server Error: 2!".into()));
             }
         }
         Err(error) => {
             eprintln!("Error: Transfering funds failed while subtracting funds. Error: {}", error);
-            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 3!".into()});
+            return Json(TransferFundsResponse::fail("Internal server Error: 3!".into()));
         }
     };
 
@@ -250,16 +244,16 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
     match add_funds_query {
         Ok(result) => {
             if result.rows_affected() == 0 {
-                return Json(TransferFundsResponse{ success: false, message: "Receiver not found".into()});
+                return Json(TransferFundsResponse::fail("Receiver not found".into()));
             }
             if result.rows_affected() != 1 {
                 eprintln!("Error: Transfering funds failed too may rows affected while adding funds!");
-                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 4!".into()});
+                return Json(TransferFundsResponse::fail("Internal server Error: 4!".into()));
             }
         }
         Err(error) => {
             eprintln!("Error: Transfering funds failed while adding funds. Error: {}", error);
-            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 5!".into()});
+            return Json(TransferFundsResponse::fail("Internal server Error: 5!".into()));
         }    
     };
 
@@ -279,16 +273,16 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
     match create_transaction_query {
         Ok(result) => {
             if result.rows_affected() == 0 {
-                return Json(TransferFundsResponse{ success: false, message: "Receiver not found".into()});
+                return Json(TransferFundsResponse::fail("Receiver not found".into()));
             }
             if result.rows_affected() != 1 {
                 eprintln!("Error: Transfering funds failed too may rows affected while inserting transaction!");
-                return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 6!".into()});
+                return Json(TransferFundsResponse::fail("Internal server Error: 6!".into()));
             }
         }
         Err(error) => {
             eprintln!("Error: Transfering funds failed while inserting transaction. Error: {}", error);
-            return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 7!".into()});
+            return Json(TransferFundsResponse::fail("Internal server Error: 7!".into()));
         }    
     };
 
@@ -296,8 +290,8 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
 
     if commited_transaction.is_err() {
        eprintln!("Error: Transfering funds failed while commiting transaction. Error: {}", commited_transaction.unwrap_err());
-        return Json(TransferFundsResponse{ success: false, message: "Internal server Error: 8!".into()});
+        return Json(TransferFundsResponse::fail("Internal server Error: 8!".into()));
     }
 
-    Json(TransferFundsResponse{ success: true, message: "success".into()})
+    Json(TransferFundsResponse::success())
 }

@@ -1,4 +1,4 @@
-use shared_server_lib::{server_configurator::{ServerConfiguration, ServerType}, server_database};
+use shared_server_lib::{server_configurator::{ServerConfiguration, ServerType}, server_database, common::ResponseStatus};
 
 use axum::{
     extract::{Json, State},
@@ -20,8 +20,7 @@ struct GetUserDataRequest {
 
 #[derive(Debug, Serialize)]
 struct GetUserDataResponse {
-    success: bool,
-    message: String,
+    response_status: ResponseStatus,
     username: String,
     personal_number: String,
     extra_data: String,
@@ -29,18 +28,23 @@ struct GetUserDataResponse {
 
 #[derive(Debug, Serialize)]
 struct GetAllUsernamesResponse {
-    success: bool,
-    message: String,
+    response_status: ResponseStatus,
     usernames: Vec<String>
 }
 
 impl GetUserDataResponse {
     fn fail(reason: &str) -> GetUserDataResponse {
-        GetUserDataResponse{ success: false, message: reason.into(), username: "".into(), personal_number: "".into(), extra_data: "".into() }
+        GetUserDataResponse{ response_status: ResponseStatus::fail(reason.into()),
+                            username: "".into(),
+                            personal_number: "".into(),
+                            extra_data: "".into() }
     }
 
     fn success(username: String, personal_number: String, extra_data: String) -> GetUserDataResponse {
-        GetUserDataResponse{ success: true, message: "success".into(), username, personal_number, extra_data }
+        GetUserDataResponse{ response_status: ResponseStatus::success(),
+                            username,
+                            personal_number,
+                            extra_data }
     }
 }
 
@@ -107,11 +111,11 @@ async fn get_all_usernames(State(state): State<Arc<ServerState>>) -> impl IntoRe
     let response = match all_usernames_query {
         Ok(all_usernames) => {
             let usernames: Vec<String> = all_usernames.into_iter().map(|(u,)| u).collect();
-            GetAllUsernamesResponse{ success: true, message: "success".into(), usernames }
+            GetAllUsernamesResponse{ response_status: ResponseStatus::success(), usernames }
         },
         Err(error) => {
             eprintln!("Error: Getting all usernames failed. Error: {}", error);
-            GetAllUsernamesResponse{ success: false, message: "No usernames found: Server error!".into(), usernames : Vec::new() }
+            GetAllUsernamesResponse{ response_status: ResponseStatus::fail("No usernames found: Server error!".into()), usernames : Vec::new() }
         }
     };
 

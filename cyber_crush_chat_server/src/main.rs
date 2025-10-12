@@ -1,4 +1,4 @@
-use shared_server_lib::{server_configurator::{ServerConfiguration, ServerType}, server_database, common_requests};
+use shared_server_lib::{server_configurator::{ServerConfiguration, ServerType}, server_database, common, common::ResponseStatus};
 
 use axum::{
     extract::{Json, State},
@@ -29,8 +29,7 @@ struct DirectChat {
 
 #[derive(Debug, Serialize)]
 struct GetUserChatsResponse {
-    success: bool,
-    message: String,
+    response_status: ResponseStatus,
     chats: Option<Vec<DirectChat>>,
 }
 
@@ -49,8 +48,7 @@ struct ChatMessage {
 
 #[derive(Debug, Serialize)]
 struct GetDirectChatHistoryResponse {
-    success: bool,
-    message: String,
+    response_status: ResponseStatus,
     username_a: String,
     username_b: String,
     messages: Vec<ChatMessage>,
@@ -58,18 +56,16 @@ struct GetDirectChatHistoryResponse {
 
 impl GetDirectChatHistoryResponse {
         fn fail(reason: &str) -> GetDirectChatHistoryResponse {
-        GetDirectChatHistoryResponse{ 
-            success: false,
-            message: reason.into(),
+        GetDirectChatHistoryResponse{
+            response_status: ResponseStatus::fail(reason.into()),
             username_a: "".into(),
             username_b: "".into(),
             messages: vec![] }
     }
 
     fn success(username_a: String, username_b: String, messages: Vec<ChatMessage>) -> GetDirectChatHistoryResponse {
-        GetDirectChatHistoryResponse{ 
-            success: true,
-            message: "success".into(),
+        GetDirectChatHistoryResponse{
+            response_status: ResponseStatus::success(),
             username_a,
             username_b,
             messages }
@@ -131,16 +127,16 @@ async fn get_user_chats(State(state): State<Arc<ServerState>>, Json(payload): Js
         Ok(chats) => chats,
         Err(error) => {
             eprintln!("Error: Getting user direct chats failed for token {}, Error: {}", payload.token, error);
-            return Json(GetUserChatsResponse{ success: false, message: "Internal server error 1".into(), chats: None });
+            return Json(GetUserChatsResponse{ response_status: ResponseStatus::fail("Internal server error 1".into()), chats: None });
         }
     };
 
-    Json(GetUserChatsResponse{ success: true, message: "success".into(), chats: Some(direct_chats) })
+    Json(GetUserChatsResponse{ response_status: ResponseStatus::success(), chats: Some(direct_chats) })
 }
 
 
 async fn get_direct_chat_history(State(state): State<Arc<ServerState>>, Json(payload): Json<GetDirectChatHistoryRequest>) -> impl IntoResponse {
-    let validated = common_requests::validate_token(&state.db_pool, &payload.token).await;
+    let validated = common::validate_token(&state.db_pool, &payload.token).await;
     
     if validated.success == false {
         return Json(GetDirectChatHistoryResponse::fail("Token validation failed".into()));
