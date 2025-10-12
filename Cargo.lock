@@ -320,6 +320,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cyber_crush_chat_server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "serde",
+ "serde_json",
+ "shared_server_lib",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "cyber_crush_data_server"
 version = "0.1.0"
 dependencies = [

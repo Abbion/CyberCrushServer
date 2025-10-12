@@ -137,7 +137,7 @@ async fn get_user_transaction_history(State(state): State<Arc<ServerState>>, Jso
     let response = match transactions_query {
         Ok(transactions) => GetUserTransactionHistoryResponse { success: true, message: "success".into(), transactions },
         Err(error) => {
-            eprintln!("Error: Getting user transaction history failed for token{} Error: {}", payload.token, error);
+            eprintln!("Error: Getting user transaction history failed for token {} Error: {}", payload.token, error);
             GetUserTransactionHistoryResponse { success: false, message: "No transaction found. Server error!".into(), transactions: vec![] }
         }
     };

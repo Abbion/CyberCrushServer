@@ -1,4 +1,4 @@
-use shared_server_lib::{server_configurator::{ServerConfiguration, ServerType}, server_database};
+use shared_server_lib::{server_configurator::{ServerConfiguration, ServerType}, server_database, common_requests};
 
 use axum::{
     extract::{Json, State},
@@ -26,17 +26,6 @@ struct LoginResponse {
     success: bool,
     message: String,
     token: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ValidateTokenRequest {
-    token: String,
-}
-
-#[derive(Debug, Serialize)]
-struct ValidateTokenResponse {
-    success: bool,
-    message: String
 }
 
 #[derive(Debug)]
@@ -116,26 +105,9 @@ async fn login(State(state): State<Arc<ServerState>>, Json(payload): Json<LoginR
     Json(response)
 }
 
-async fn validate_token(State(state): State<Arc<ServerState>>, Json(payload): Json<ValidateTokenRequest>) -> impl IntoResponse {
-    let token_validation_query = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE user_token = $1")
-        .bind(&payload.token)
-        .fetch_optional(&state.db_pool)
-        .await;
-
-    let response = match token_validation_query {
-        Ok(Some(_)) => {
-                ValidateTokenResponse{ success: true, message: "success".into() }
-        },
-        Ok(None) => {
-            ValidateTokenResponse{ success: false, message: "Token not validated".into() }
-        },
-        Err(error) => {
-            eprintln!("Error: Failed to validate token {}: {}", payload.token, error);
-            ValidateTokenResponse{ success: false, message: "Token validation error.".into() }
-        }
-    };
-
-    Json(response)
+async fn validate_token(State(state): State<Arc<ServerState>>, Json(payload): Json<common_requests::ValidateTokenRequest>) -> impl IntoResponse {
+    let validation = common_requests::validate_token(&state.db_pool, &payload.token).await;
+    Json(validation)
 }
 
 fn verify_password(stored_hash: &str, password: &str, pepper: &str) -> Result<bool, password_hash::Error> {
