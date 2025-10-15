@@ -105,7 +105,7 @@ def init_db():
         db_cursor.execute(index_chat_messages_chat_id_timestamp);
 
         # TODO ADD INDEXES to help with the queries
-        # Join on to get the usernames SELECT t.id, u1.username AS sender, u2.username AS receiver, 
+        # Join on to get the usernames SELECT t.id, u1.username AS sender, u2.username AS receiver,
         # t.transaction_amount, t.time_stamp
         # FROM bank_transactions t
         # JOIN users u1 ON t.sending_id = u1.id

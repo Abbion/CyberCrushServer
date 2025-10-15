@@ -98,8 +98,8 @@ def main():
         insert_user_sql = "INSERT INTO users (username, password, user_token, personal_number, extra_data) VALUES (%s, %s, %s, %s, %s) RETURNING id;"
         insert_funds_sql = "INSERT INTO bank_accounts (user_id, funds) VALUES (%s, %s) RETURNING id;"
         insert_bank_transaction_sql = "INSERT INTO bank_transactions (sender_id, receiver_id, message, amount, time_stamp) VALUES(%s, %s, %s, %s, %s);"
-        insert_direct_chat_sql = "INSERT INTO direct_chats (user_a_id, user_b_id, last_message, last_message_time_stamp) VALUES(%s, %s, %s, %s) ON CONFLICT (user_a_id, user_b_id) DO NOTHING RETURNING id;"
-        inset_direct_message_sql = "INSERT INTO direct_chat_messages (chat_id, sender_id, message, time_stamp) VALUES (%s, %s, %s, %s);"
+        insert_direct_chat_sql = "INSERT INTO direct_chats (user_a_id, user_b_id, last_message, last_message_time_stamp) VALUES(%s, %s, NULL, NULL) ON CONFLICT (user_a_id, user_b_id) DO NOTHING RETURNING id;"
+        insert_direct_message_sql = "INSERT INTO direct_chat_messages (chat_id, sender_id, message, time_stamp) VALUES (%s, %s, %s, %s);"
         
         for (itr, user_data) in enumerate(users):
             username = user_data["username"]
@@ -160,7 +160,7 @@ def main():
                 min_id = min(sender_id, receiver_id)
                 max_id = max(sender_id, receiver_id)
                 
-                insert_direct_chat_params = (min_id, max_id, "Not init", "2025-01-01 00:00:00")
+                insert_direct_chat_params = (min_id, max_id)
                 db_cursor.execute(insert_direct_chat_sql, insert_direct_chat_params)
                 direct_chat_id = db_cursor.fetchone()
                 chat_user_pair = f"{min_id}+{max_id}"
@@ -172,7 +172,7 @@ def main():
                 message_content = message["message"]
                 time_stamp = message["time_stamp"]
                 insert_direct_message_params = (direct_chat_id, sender_id, message_content, time_stamp)
-                db_cursor.execute(inset_direct_message_sql, insert_direct_message_params)
+                db_cursor.execute(insert_direct_message_sql, insert_direct_message_params)
         
         
         #Update last message and last message time stamp in direct chat

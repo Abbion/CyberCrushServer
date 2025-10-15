@@ -10,8 +10,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::PgPool;
 use chrono;
+use std::cmp;
 
 #[derive(Debug, Deserialize)]
 struct GetUserChatsRequest {
@@ -55,7 +56,7 @@ struct GetDirectChatHistoryResponse {
 }
 
 impl GetDirectChatHistoryResponse {
-        fn fail(reason: &str) -> GetDirectChatHistoryResponse {
+    fn fail(reason: &str) -> GetDirectChatHistoryResponse {
         GetDirectChatHistoryResponse{
             response_status: ResponseStatus::fail(reason.into()),
             username_a: "".into(),
@@ -69,6 +70,38 @@ impl GetDirectChatHistoryResponse {
             username_a,
             username_b,
             messages }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateNewDirectChatRequest {
+    token: String,
+    receiver_username: String,
+}
+
+#[derive(Debug, Serialize)]
+struct CreateNewDirectChatResponse {
+    response_status: ResponseStatus,
+    chat_id: i32,
+}
+
+impl CreateNewDirectChatResponse {
+    fn fail(reason: &str) -> CreateNewDirectChatResponse {
+        CreateNewDirectChatResponse{
+            response_status: ResponseStatus::fail(reason.into()),
+            chat_id: -1 }
+    }
+
+    fn success(chat_id: i32) -> CreateNewDirectChatResponse {
+        CreateNewDirectChatResponse{
+            response_status: ResponseStatus::success(),
+            chat_id }
+    }
+
+    fn chat_exists(chat_id: i32) -> CreateNewDirectChatResponse {
+        CreateNewDirectChatResponse{
+            response_status: ResponseStatus::fail("Direct chat already exsits!".into()),
+            chat_id }
     }
 }
 
@@ -92,6 +125,7 @@ async fn main() {
         .route("/hello", get(hello))
         .route("/get_user_chats", post(get_user_chats))
         .route("/get_direct_chat_history", post(get_direct_chat_history))
+        .route("/create_new_direct_chat", post(create_new_direct_chat))
         .with_state(server_state.clone());
 
     axum::serve(listener, app).await.unwrap();
@@ -204,4 +238,93 @@ async fn get_direct_chat_history(State(state): State<Arc<ServerState>>, Json(pay
             participant_info.user_a_username,
             participant_info.user_b_username, 
             chat_messages))
+}
+
+async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(payload): Json<CreateNewDirectChatRequest>) -> impl IntoResponse {
+    let sender_id_query = sqlx::query_scalar::<_, i32>(
+        "SELECT id FROM users WHERE user_token = $1"
+    )
+    .bind(&payload.token)
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    let sender_id = match sender_id_query {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            return Json(CreateNewDirectChatResponse::fail("User not validated!"));
+        },
+        Err(error) => {
+            eprintln!("Error: Creating direct chat failed while getting the sender id for token: {} and receiver: {}, Error: {}",
+                      payload.token, payload.receiver_username, error);
+            return Json(CreateNewDirectChatResponse::fail("Internal server error 1"));
+        }
+    };
+
+    let receiver_id_query = sqlx::query_scalar::<_, i32>(
+        "SELECT id FROM users WHERE username = $1"
+    )
+    .bind(&payload.receiver_username)
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    let receiver_id = match receiver_id_query {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            return Json(CreateNewDirectChatResponse::fail("Receiver not found!"));
+        },
+        Err(error) => {
+            eprintln!("Error: Creating direct chat failed while getting the receiver id for token: {} and receiver: {}, Error: {}",
+                      payload.token, payload.receiver_username, error);
+            return Json(CreateNewDirectChatResponse::fail("Internal server error 2"));
+        }
+    };
+
+    let min_id = cmp::min(sender_id, receiver_id);
+    let max_id = cmp::max(sender_id, receiver_id);
+
+    let find_direct_chat_query = sqlx::query_scalar::<_, i32>(
+        "SELECT id FROM direct_chats WHERE user_a_id = $1 AND user_b_id = $2"
+    )
+    .bind(&min_id)
+    .bind(&max_id)
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    match find_direct_chat_query {
+        Ok(Some(id)) => {
+            return Json(CreateNewDirectChatResponse::chat_exists(id));
+        },
+        Ok(None) => (),
+        Err(error) => {
+            eprintln!("Error: Creating direct chat failed while checking if direct chat exists for token: {} and sender: {}, Error: {}", 
+                      payload.token, payload.receiver_username, error);
+            return Json(CreateNewDirectChatResponse::fail("Internal server error 3"));
+        }
+    };
+
+    // Info: On conflict we do a simple do update, that does nothing.
+    // This enables the query to return chat id
+    // If 'DO UPDATE SET' would be replaced by 'DO NOTHING', the query would return NULL
+    let create_new_direct_chat_query = sqlx::query_scalar::<_, i32>(
+    r#"
+        INSERT INTO direct_chats (user_a_id, user_b_id, last_message, last_message_time_stamp)
+        VALUES ($1, $2, NULL, NULL)
+        ON CONFLICT (user_a_id, user_b_id) DO UPDATE SET user_a_id = EXCLUDED.user_a_id
+        RETURNING id
+    "#)
+    .bind(&min_id)
+    .bind(&max_id)
+    .fetch_one(&state.db_pool)
+    .await;
+
+    let response = match create_new_direct_chat_query {
+        Ok(id) => CreateNewDirectChatResponse::success(id),
+        Err(error) => {
+            eprintln!("Error: Creating direct chat failed while inserting a new direct chat for token: {} and sender: {}, Error: {}", 
+                      payload.token, payload.receiver_username, error);
+            CreateNewDirectChatResponse::fail("Internal server error 4")
+        }
+    };
+
+    Json(response)
 }
