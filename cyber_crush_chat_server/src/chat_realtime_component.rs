@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, ws::{WebSocket, WebSocketUpgrade, Message}},
+    extract::{State, ws::{WebSocket, WebSocketUpgrade, Message, CloseFrame}},
     response::IntoResponse,
 };
 
@@ -8,18 +8,32 @@ use futures::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
+use futures_util::stream::SplitSink;
 
 use crate::common_chat::ServerState;
+        
+type WsSender = SplitSink<WebSocket, Message>;
+
+use std::any::type_name;
+fn print_type_of<T>(_:&T) {
+    println!("{}", type_name::<T>());
+}
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
-enum ChatChlientMessage {
+enum ChatClientMessage {
     Init { token: String, chat_id: i32 },
     Msg { token: String, message: String },
     Exit { token: String },
 }
 
-#[derive(Serialize)]
+struct ConnectionData {
+    token: String,
+    user_id: i32,
+    chat_id: i32,
+}
+
+#[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 enum ChatResponse {
     Info { text: String },
@@ -32,65 +46,180 @@ pub async fn web_socket_handler(ws: WebSocketUpgrade, State(state): State<Arc<Se
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 
-pub async fn handle_socket(web_socket: WebSocket, state: Arc<ServerState>){
+pub async fn handle_socket(web_socket: WebSocket, state: Arc<ServerState>) {
     let (mut sender, mut receiver) = web_socket.split();
-
-    if let Some(Ok(Message::Text(text))) = receiver.next().await {
-        if let Ok(ChatChlientMessage::Init{ token, chat_id }) = serde_json::from_str::<ChatChlientMessage>(&text) {
-            match validate_user_and_chat(&state, &token, chat_id).await {
-                Ok(user_id) => {
-                    let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
-                    state.token_to_chat_id.insert(token.clone(), chat_id);
-                    state.chat_connections.entry(chat_id).or_default().push((user_id, tx.clone()));
-
-                    let msg = ChatResponse::Info{ text: format!("Nice to meed you: {}", token) };
-                    let _ = sender.send(Message::Text(serde_json::to_string(&msg).unwrap().into())).await;
-
-                    let mut ws_sender = sender;
-                    tokio::spawn(async move {
-                        while let Some(msg) = rx.recv().await{
-                            if ws_sender.send(msg).await.is_err() {
-                                break;
-                            }
-                        }
-                    });
-                }
+    
+    let connection_request_data = match receiver.next().await
+    {
+        Some(Ok(Message::Text(text))) => {
+            let (token, chat_id) = match serde_json::from_str::<ChatClientMessage>(&text) {
+                Ok(ChatClientMessage::Init{ token, chat_id }) => ( token, chat_id ),
+                Ok(_) => {
+                    let error_response = ChatResponse::Error{ text: "Wrong client message type".into() };
+                    send_chat_response(&mut sender, &error_response).await;
+                    close_connection(&mut sender).await;
+                    return;
+                },
                 Err(error) => {
-                    let _ = sender.send(Message::Text(serde_json::to_string(&ChatResponse::Error{ text: error }).unwrap().into())).await;
+                    eprintln!("Error: receiving init message failed: {}", error);
+                    let error_response = ChatResponse::Error{ text: "Internal connection request server error".into() };
+                    send_chat_response(&mut sender, &error_response).await;
+                    close_connection(&mut sender).await;
+                    return;
                 }
+            };
+
+            let user_id = match validate_user_and_chat(&state, &token, chat_id).await {
+                Ok(id) => id,
+                Err(error) => {
+                    send_chat_response(&mut sender, &error).await;
+                    close_connection(&mut sender).await;
+                    return;
+                }
+            };
+
+            ConnectionData{ token, user_id, chat_id }
+        }
+        Some(_) => {
+            let error_response = ChatResponse::Error{ text: "Wrong socket message type".into() };
+            send_chat_response(&mut sender, &error_response).await;
+            close_connection(&mut sender).await;
+            return;
+        },
+        None => {
+            let error_response = ChatResponse::Error{ text: "No message sent. Close connection".into() };
+            send_chat_response(&mut sender, &error_response).await;
+            close_connection(&mut sender).await;
+            return;
+        }
+    };
+
+    let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
+    state.token_to_chat_id.insert(connection_request_data.token.clone(), connection_request_data.chat_id);
+    state.chat_connections.entry(connection_request_data.chat_id).or_default().push((connection_request_data.user_id, tx.clone()));
+
+    let connection_success_response = ChatResponse::Info{ text: format!("User connected to chat!") };
+    send_chat_response(&mut sender, &connection_success_response).await;
+    
+    //Thread that sends messages from the channel to the websocket client
+    tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            if sender.send(msg).await.is_err() {
+                break;
             }
         }
-        else {
-            let _ = sender.send(Message::Text(serde_json::to_string(&ChatResponse::Error { text: "Invalid init message".into() }).unwrap().into())).await;
+    });
+
+    while let Some(Ok(msg)) = receiver.next().await {
+        if let Message::Text(text) = msg {
+            match serde_json::from_str::<ChatClientMessage>(&text) {
+                Ok(ChatClientMessage::Msg { token, message }) => {
+                    if token != connection_request_data.token {
+                        eprintln!("Error: token mismatch in message");
+                        continue;
+                    }
+
+                    let time_stamp = chrono::Utc::now().to_rfc3339();
+                    let chat_response = ChatResponse::ChatMessage {
+                        chat_id: connection_request_data.chat_id,
+                        message: message.clone(),
+                        time_stamp: time_stamp.clone(),
+                    };
+
+                    // Wysyłamy do wszystkich użytkowników w czacie
+                    if let Some(users) = state.chat_connections.get(&connection_request_data.chat_id) {
+                        for (user_id, tx) in users.iter() {
+                            if *user_id != connection_request_data.user_id {
+                                if let Ok(json_text) = serde_json::to_string(&chat_response) {
+                                    let _ = tx.send(Message::Text(json_text.into()));
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
+    }
+
+    state.token_to_chat_id.remove(&connection_request_data.token);
+    if let Some(mut vec) = state.chat_connections.get_mut(&connection_request_data.chat_id) {
+        vec.retain(|(uid, _)| *uid != connection_request_data.user_id);
     }
 
     println!("END socket");
 }
 
-async fn validate_user_and_chat(state: &ServerState, token: &str, chat_id: i32) -> Result<i32, String> {
+async fn validate_user_and_chat(state: &ServerState, token: &str, chat_id: i32) -> Result<i32, ChatResponse> {
     let user_id_query = sqlx::query_scalar::<_, i32>(
         "SELECT id FROM users WHERE user_token = $1"
     )
     .bind(token)
     .fetch_optional(&state.db_pool)
-    .await
-    .map_err(|e| format!("DB error: {e}"))?;
+    .await;
 
-    let user_id = user_id_query.ok_or("Invalid token")?;
+    let user_id = match user_id_query {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            return Err(ChatResponse::Error{ text: "Failed to validate token".into() });
+        }
+        Err(error) => {
+            eprintln!("Error: realtime chat component failed while validate user token: {}, error: {}", token, error);
+            return Err(ChatResponse::Error{ text: "Internal validation server error 1".into() });
+        }
+    };
 
-    let chat_check = sqlx::query_scalar::<_, i32>(
+    let chat_id_query = sqlx::query_scalar::<_, i32>(
         "SELECT id FROM direct_chats WHERE id = $1 AND (user_a_id = $2 OR user_b_id = $2)"
     )
     .bind(chat_id)
     .bind(user_id)
     .fetch_optional(&state.db_pool)
-    .await
-    .map_err(|e| format!("DB error: {e}"))?;
+    .await;
 
-    if chat_check.is_none() {
-        return Err("Chat not found or user not participant".into());
-    }
+    match chat_id_query {
+        Ok(Some(_id)) => (),
+        Ok(None) => {
+            return Err(ChatResponse::Error{ text: "Failed to find chat".into() });
+        }
+        Err(error) => {
+            eprintln!("Error: realtime chat component failed while checking chat id for chat: {}, error: {}", chat_id, error);
+            return Err(ChatResponse::Error{ text: "Internal validation server error 2".into() });
+        }
+    };
 
     Ok(user_id)
+}
+
+async fn send_chat_response(sender: &mut WsSender, chat_response: &ChatResponse) {
+    let parsed_response = match serde_json::to_string(&chat_response) {
+        Ok(parsed_str) => parsed_str.into(),
+        Err(error) => {
+            eprintln!("Error: realtime chat component failed while parsing chat response: {:?}", chat_response);
+            return;
+        }
+    };
+
+    match sender.send(parsed_response).await {
+        Ok(_) => (),
+        Err(error) => {
+            eprintln!("Error: realtime chat component failed while sending chat response: {:?}, error: {}", chat_response, error);
+        }
+    }
+}
+
+async fn close_connection(sender: &mut WsSender) {
+    if let Err(error) = sender.send(Message::Close(Some(CloseFrame{ code: axum::extract::ws::close_code::NORMAL, reason: "close".into() }))).await {
+        eprintln!("Error: realtime chat component failed while closeing a connection: {}", error);
+        return;
+    }
+
+    if let Err(error) = sender.flush().await {
+        eprintln!("Error: realtime chat component failed while flushing close frame: {}", error);
+        return;
+    }
+    
+    //TODO Clean the state
+
+    println!("Close connection!");
 }
