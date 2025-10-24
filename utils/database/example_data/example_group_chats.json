@@ -1,0 +1,19 @@
+[
+    {
+	"admin" : "Karma",
+	"title" : "Cat problem",
+	"user_1" : "Karma",
+	"user_2" : "Amadeus",
+	"user_3" : "Victor",
+
+	"messages" : [
+	    { "sender" : "1", "content" : "I have a cat to give away", "time_stamp" : "2025-10-16 17:23:04" },
+	    { "sender" : "3", "content" : "Yeppie, can we have it?", "time_stamp" : "2025-10-16 17:27:43" },
+	    { "sender" : "2", "content" : "I want a dog :(", "time_stamp" : "2025-10-16 17:30:10" },
+	    { "sender" : "3", "content" : "Shut up", "time_stamp" : "2025-10-16 17:30:20" },
+	    { "sender" : "3", "content" : "We are takeing the cat", "time_stamp" : "2025-10-16 17:30:27" },
+	    { "sender" : "1", "content" : "I will bring it tomorrow morning", "time_stamp" : "2025-10-16 17:42:44" },
+	    { "sender" : "2", "content" : ":/", "time_stamp" : "2025-10-16 18:02:32" }
+	]
+    }
+]
