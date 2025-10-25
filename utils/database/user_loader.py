@@ -10,6 +10,7 @@ PEPPER = ""
 MAX_USERNAME_LENGTH = 8
 MAX_PASSWORD_LENGTH = 16
 MAX_EXTRA_DATA_LENGTH = 8192
+MAX_GROUP_CHAT_MEMBERS = 16
 
 DATABASE_NAME = ""
 DATABASE_USERNAME = ""
@@ -30,6 +31,7 @@ def setup_configuration() -> bool:
         MAX_USERNAME_LENGTH = config["max_username_length"]
         MAX_PASSWORD_LENGTH = config["max_password_length"]
         MAX_EXTRA_DATA_LENGTH = config["max_extra_data_length"]
+        MAX_GROUP_CHAT_MEMVERS = config["max_group_chat_members"]
 
         DATABASE_NAME = config["database_name"]
         DATABASE_USERNAME = config["database_admin_username"]
@@ -69,7 +71,6 @@ def load_user_data(user_data_path, db_connection):
     password_hasher = PasswordHasher()
     personal_numbers = generate_unique_personal_numbers(len(users))
 
-    username_to_bank_id = {}
     username_to_id = {}
 
     try:
@@ -77,12 +78,7 @@ def load_user_data(user_data_path, db_connection):
 
         insert_user_sql = """INSERT INTO users (username, password, user_token, personal_number, extra_data)
                             VALUES (%s, %s, %s, %s, %s) RETURNING id;"""
-        insert_funds_sql = """INSERT INTO bank_accounts (user_id, funds)
-                                VALUES (%s, %s) RETURNING id;"""
-        insert_bank_transaction_sql = """INSERT INTO bank_transactions (sender_id, receiver_id, message, amount, time_stamp)
-                                        VALUES(%s, %s, %s, %s, %s);"""
         
-        #Insert users
         for (itr, user_data) in enumerate(users):
             username = user_data["username"]
             password = user_data["password"]
@@ -98,35 +94,203 @@ def load_user_data(user_data_path, db_connection):
             user_id = db_cursor.fetchone()[0]
             username_to_id[username] = user_id
 
-            bank_account = user_data.get("bank_account", {})
-            funds = bank_account["funds"]
-            insert_funds_params = (user_id, funds)
+    except Exception:
+        if db_connection:
+            db_connection.rollback()
+        raise
+    finally:
+        if db_connection:
+            db_cursor.close()
+
+    return username_to_id
+
+def load_banking_data(banking_data_path, username_to_id_map, db_connection):
+    with open(banking_data_path, "r", encoding="utf-8") as file:
+        bank_accounts = json.load(file)
+    
+    username_to_bank_id = {}
+
+    try:
+        db_cursor = db_connection.cursor()
+
+        insert_funds_sql = """INSERT INTO bank_accounts (user_id, funds)
+                                VALUES (%s, %s) RETURNING id;"""
+        insert_bank_transaction_sql = """INSERT INTO bank_transactions (sender_id, receiver_id, message, amount, time_stamp)
+                                        VALUES(%s, %s, %s, %s, %s);"""
+
+        #Insert accounts with funds
+        for account in bank_accounts:
+            account_owner_username = account["username"]
+            account_owner_id = username_to_id_map[account_owner_username]
+            current_funds = account["current_funds"]
+
+            insert_funds_params = (account_owner_id, current_funds)
             db_cursor.execute(insert_funds_sql, insert_funds_params)
 
             bank_account_id = db_cursor.fetchone()[0]
-            username_to_bank_id[username] = bank_account_id
+            username_to_bank_id[account_owner_username] = bank_account_id
 
-        #Insert bank transactions
-        for user_data in users:
-            username = user_data["username"]
-            sender_id = username_to_bank_id[username]
+        #Insert transactions
+        for account in bank_accounts:
+            sender_username = account["username"]
+            sender_id = username_to_bank_id[sender_username]
+            transactions = account["transactions"]
 
-            for bank_transaction in user_data["bank_transactions"]:
-                receiver_username = bank_transaction["receiver"]
-                receiver_id = username_to_bank_id.get(receiver_username)
+            for transaction in transactions:
+                receiver_username = transaction["receiver"]
+                receiver_id = username_to_bank_id[receiver_username]
 
                 if receiver_id is None:
                     print(f"No receiver {receiver_username} bank account found!")
                     continue
                 
-                amount = bank_transaction["amount"]
-                transaction_message = bank_transaction["message"]
-                transaction_time_stamp = bank_transaction["time_stamp"]
+                message = transaction["message"]
+                amount = transaction["amount"]
+                time_stamp = transaction["time_stamp"]
 
-                insert_bank_transaction_params = (sender_id, receiver_id, transaction_message, amount, transaction_time_stamp)
-
+                insert_bank_transaction_params = (sender_id, receiver_id, message, amount, time_stamp)
                 db_cursor.execute(insert_bank_transaction_sql, insert_bank_transaction_params)
 
+    except Exception:
+        if db_connection:
+            db_connection.rollback()
+        raise
+    finally:
+        if db_connection:
+            db_cursor.close()
+
+def insert_chat(db_cursor):
+    insert_chat_sql = """INSERT INTO chats DEFAULT VALUES RETURNING id;"""
+    db_cursor.execute(insert_chat_sql)
+    return db_cursor.fetchone()[0]
+
+def insert_chat_message(db_cursor, chat_id, sender_id, content, time_stamp):
+    insert_message_sql = """INSERT INTO chat_messages (chat_id, sender_id, content, time_stamp)
+                                VALUES (%s, %s, %s, %s);"""
+    insert_message_params = (chat_id, sender_id, content, time_stamp)
+    db_cursor.execute(insert_message_sql, insert_message_params)
+
+def assign_user_chat(db_cursor, chat_id, user_id):
+    insert_user_chat_sql = """INSERT INTO user_chats (chat_id, user_id)
+                                VALUES (%s, %s);"""
+    insert_user_chat_params = (chat_id, user_id)
+    db_cursor.execute(insert_user_chat_sql, insert_user_chat_params)
+
+def get_last_message_and_time_stamp(db_cursor, chat_id):
+    get_last_message_info_sql = """SELECT content, time_stamp
+                                        FROM chat_messages
+                                        WHERE chat_id = %s
+                                        ORDER BY time_stamp DESC
+                                        LIMIT 1;"""
+
+    db_cursor.execute(get_last_message_info_sql, (chat_id,))
+    return db_cursor.fetchone()
+     
+
+def load_direct_chat_data(direct_chat_data_path, username_to_id_map, db_connection):
+    with open(direct_chat_data_path, "r", encoding="utf-8") as file:
+        direct_chats = json.load(file)
+
+    try:
+        db_cursor = db_connection.cursor()
+        
+        insert_direct_chat_sql = """INSERT INTO direct_chats (chat_id, last_message, last_time_stamp)
+                                        VALUES (%s, %s, %s);"""
+       
+        for direct_chat in direct_chats:
+            user_a = direct_chat["user_a"]
+            user_a_id = username_to_id_map[user_a]
+            user_b = direct_chat["user_b"]
+            user_b_id = username_to_id_map[user_b]
+            messages = direct_chat["messages"]
+
+            chat_id = insert_chat(db_cursor)
+            assign_user_chat(db_cursor, chat_id, user_a_id)
+            assign_user_chat(db_cursor, chat_id, user_b_id)
+
+            for message in messages:
+                sender = message["sender"]
+                if sender == "a":
+                    sender = user_a_id
+                elif sender == "b":
+                    sender = user_b_id
+                else:
+                    print("Sender tag is not a or b in direct_chat: ", direct_chat)
+                    continue
+                
+                content = message["content"]
+                time_stamp = message["time_stamp"]
+
+                insert_chat_message(db_cursor, chat_id, sender, content, time_stamp)
+
+            last_message_info = get_last_message_and_time_stamp(db_cursor, chat_id)
+
+            if last_message_info:
+                last_message, last_time_stamp = last_message_info
+                insert_direct_chat_params = (chat_id, last_message, last_time_stamp)
+                db_cursor.execute(insert_direct_chat_sql, insert_direct_chat_params)
+
+ 
+    except Exception:
+        if db_connection:
+            db_connection.rollback()
+        raise
+    finally:
+        if db_connection:
+            db_cursor.close()
+
+def load_group_chat_data(group_chat_data_path, username_to_id_map, db_connection):
+    with open(group_chat_data_path, "r", encoding="utf-8") as file:
+        group_chats = json.load(file)
+
+    try:
+        db_cursor = db_connection.cursor()
+
+        insert_group_chat_sql = """INSERT INTO group_chats (chat_id, admin_id, title, last_message, last_time_stamp)
+                                        VALUES (%s, %s, %s, %s, %s);"""
+
+        for group_chat in group_chats:
+            admin = group_chat["admin"]
+            admin_id = username_to_id_map[admin]
+            title = group_chat["title"]
+            members = {}
+
+            chat_id = insert_chat(db_cursor)
+
+            for i in range(1, MAX_GROUP_CHAT_MEMBERS + 1):
+                member_tag = f"user_{i}"
+                member_username = group_chat.get(member_tag)
+                if member_username == None:
+                    break
+                member_id = username_to_id_map[member_username]
+                members[i] = member_id
+                assign_user_chat(db_cursor, chat_id, member_id)
+
+            messages = group_chat["messages"]
+
+            for message in messages:
+                sender_tag = message["sender"]
+                content = message["content"]
+                time_stamp = message["time_stamp"]
+                sender_id = members[sender_tag]
+                
+                insert_chat_message(db_cursor, chat_id, sender_id, content, time_stamp)
+            
+            last_message_info = get_last_message_and_time_stamp(db_cursor, chat_id)
+
+            if last_message_info:
+                last_message, last_time_stamp = last_message_info
+                insert_group_chat_params = (chat_id, admin_id, title, last_message, last_time_stamp)
+                db_cursor.execute(insert_group_chat_sql, insert_group_chat_params)
+             
+
+    except Exception:
+        if db_connection:
+            db_connection.rollback()
+        raise
+    finally:
+        if db_connection:
+            db_cursor.close()
 
 def main():
     parser = argparse.ArgumentParser(description = "Loads user data to the database from .json files")
@@ -139,90 +303,38 @@ def main():
     if not setup_configuration():
         return
    
-   db_connection = psycopg2.connect(dbname = DATABASE_NAME,
-                                         user = DATABASE_USERNAME,
-                                         password = DATABASE_PASSWORD,
-                                         host = DATABASE_URL,
-                                         port = DATABASE_PORT);
+    db_connection = psycopg2.connect(dbname = DATABASE_NAME,
+                                    user = DATABASE_USERNAME,
+                                    password = DATABASE_PASSWORD,
+                                    host = DATABASE_URL,
+                                    port = DATABASE_PORT);
 
     db_connection.autocommit = False
+    username_to_id_map = {}
 
     if args.u:
+        print("Loading user data...")
         user_data_path = args.u
-        
+        username_to_id_map = load_user_data(user_data_path, db_connection)
+
     if args.b:
+        print("Loading banking data...")
         banking_data_path = args.b
+        load_banking_data(banking_data_path, username_to_id_map, db_connection)
 
     if args.dc:
+        print("Loading direct chat data...")
         direct_chat_data_path = args.dc
+        load_direct_chat_data(direct_chat_data_path, username_to_id_map, db_connection)
 
     if args.gc:
+        print("Loading group chat data...")
         group_chat_data_path = args.gc
-        
+        load_group_chat_data(group_chat_data_path, username_to_id_map, db_connection)
     
-   
-
-
-
-
-           
-        #Direct chats
-        for user_data in users:
-            username = user_data["username"]
-            sender_id = username_to_id[username]
-            receivers = set()
-            direct_messages = user_data["direct_messages"]
-
-            for message in direct_messages:
-                receiver = message["receiver"]
-                receiver_id = username_to_id[receiver]
-                
-                min_id = min(sender_id, receiver_id)
-                max_id = max(sender_id, receiver_id)
-                
-                insert_direct_chat_params = (min_id, max_id)
-                db_cursor.execute(insert_direct_chat_sql, insert_direct_chat_params)
-                direct_chat_id = db_cursor.fetchone()
-                chat_user_pair = f"{min_id}+{max_id}"
-                
-                if direct_chat_id != None:
-                    user_pair_to_direct_chat_id[chat_user_pair] = direct_chat_id[0]
-
-                direct_chat_id = user_pair_to_direct_chat_id[chat_user_pair]               
-                message_content = message["message"]
-                time_stamp = message["time_stamp"]
-                insert_direct_message_params = (direct_chat_id, sender_id, message_content, time_stamp)
-                db_cursor.execute(insert_direct_message_sql, insert_direct_message_params)
-        
-        
-        #Update last message and last message time stamp in direct chat
-        update_last_message_and_time_stamp_sql = sql.SQL("""
-            UPDATE direct_chats AS dc
-            SET
-                last_message = dm.message,
-                last_message_time_stamp = dm.time_stamp
-            FROM (
-                SELECT DISTINCT ON (chat_id)
-                    chat_id,
-                    message,
-                    time_stamp
-                FROM direct_chat_messages
-                ORDER BY chat_id, time_stamp DESC
-            ) AS dm
-            WHERE dc.id = dm.chat_id
-        """)
-
-        db_cursor.execute(update_last_message_and_time_stamp_sql)
-
-        db_connection.commit()
-    except Exception:
-        if db_connection:
-            db_connection.rollback()
-        raise
-    finally:
-        if db_connection:
-            db_cursor.close()
-            db_connection.close()
-        
+    db_connection.commit()
+    db_connection.close()
+    print("Loader finished")
+    
 if __name__ == "__main__":
     main()
