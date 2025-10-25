@@ -21,29 +21,24 @@ DATABASE_PORT = 0
 def hash_password(password: str, ph: PasswordHasher) -> str:
     return ph.hash(password + PEPPER)
 
-def setup_configuration() -> bool:
+def setup_configuration():
+    global PEPPER, MAX_UESRNAME_LENGTH, MAX_PASSWORD_LENGTH, MAX_EXTRA_DATA_LENGTH
+    global DATABASE_NAME, DATABASE_USERNAME, DATABASE_PASSWORD, DATABASE_URL, DATABASE_PORT
+    
     with open("../../server.conf", "r", encoding="utf-8") as file:
-        global PEPPER, MAX_UESRNAME_LENGTH, MAX_PASSWORD_LENGTH, MAX_EXTRA_DATA_LENGTH
-        global DATABASE_NAME, DATABASE_USERNAME, DATABASE_PASSWORD, DATABASE_URL, DATABASE_PORT
-
         config = json.load(file)
-        PEPPER = config["database_password_pepper"]
-        MAX_USERNAME_LENGTH = config["max_username_length"]
-        MAX_PASSWORD_LENGTH = config["max_password_length"]
-        MAX_EXTRA_DATA_LENGTH = config["max_extra_data_length"]
-        MAX_GROUP_CHAT_MEMVERS = config["max_group_chat_members"]
 
-        DATABASE_NAME = config["database_name"]
-        DATABASE_USERNAME = config["database_admin_username"]
-        DATABASE_PASSWORD = config["database_admin_password"]
-        DATABASE_URL = config["database_url"]
-        DATABASE_PORT = config["database_port"]
+    PEPPER = config["database_password_pepper"]
+    MAX_USERNAME_LENGTH = config["max_username_length"]
+    MAX_PASSWORD_LENGTH = config["max_password_length"]
+    MAX_EXTRA_DATA_LENGTH = config["max_extra_data_length"]
+    MAX_GROUP_CHAT_MEMVERS = config["max_group_chat_members"]
 
-    if not PEPPER:
-        print("No pepper found in the server configuration.")
-        return False
-
-    return True
+    DATABASE_NAME = config["database_name"]
+    DATABASE_USERNAME = config["database_admin_username"]
+    DATABASE_PASSWORD = config["database_admin_password"]
+    DATABASE_URL = config["database_url"]
+    DATABASE_PORT = config["database_port"]
 
 def validate_user(username: str, password: str, extra_data: str) -> bool:
     if len(username) > MAX_USERNAME_LENGTH:
@@ -300,8 +295,7 @@ def main():
     parser.add_argument("-gc", help = "group chats .json file")
     args = parser.parse_args()
 
-    if not setup_configuration():
-        return
+    setup_configuration()
    
     db_connection = psycopg2.connect(dbname = DATABASE_NAME,
                                     user = DATABASE_USERNAME,
