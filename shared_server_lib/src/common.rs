@@ -22,7 +22,11 @@ pub struct ValidateTokenRequest {
     pub token: String,
 }
 
-pub use ResponseStatus as ValidateTokenResponse;
+#[derive(Debug)]
+pub struct ValidateTokenResponse {
+    pub response_status: ResponseStatus,
+    pub id : Option<i32>
+}
 
 pub async fn validate_token(db_pool: &PgPool, token: &String) -> ValidateTokenResponse {
     let token_validation_query = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE user_token = $1")
@@ -31,11 +35,11 @@ pub async fn validate_token(db_pool: &PgPool, token: &String) -> ValidateTokenRe
         .await;
 
     match token_validation_query {
-        Ok(Some(_)) => ValidateTokenResponse::success(),
-        Ok(None) => ValidateTokenResponse::fail("Token not validated".into()),
+        Ok(Some(id)) => ValidateTokenResponse{ response_status: ResponseStatus::success(), id: Some(id) },
+        Ok(None) => ValidateTokenResponse{ response_status: ResponseStatus::fail("Token not validated".into()), id: None },
         Err(error) => {
             eprintln!("Error: Failed to validate token {}: {}", token, error);
-            ValidateTokenResponse::fail("Token validation server internal error.".into())
+            ValidateTokenResponse{ response_status: ResponseStatus::fail("Token validation server internal error.".into()), id: None }
         }
     }
 }

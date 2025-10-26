@@ -107,7 +107,7 @@ async fn login(State(state): State<Arc<ServerState>>, Json(payload): Json<LoginR
 
 async fn validate_token(State(state): State<Arc<ServerState>>, Json(payload): Json<common::ValidateTokenRequest>) -> impl IntoResponse {
     let validation = common::validate_token(&state.db_pool, &payload.token).await;
-    Json(validation)
+    Json(validation.response_status)
 }
 
 fn verify_password(stored_hash: &str, password: &str, pepper: &str) -> Result<bool, password_hash::Error> {

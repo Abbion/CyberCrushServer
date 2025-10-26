@@ -25,10 +25,19 @@ pub struct DirectChat {
     last_message_time_stamp: Option<chrono::NaiveDateTime>,
 }
 
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct GroupChat{
+    chat_id: i32,
+    title: String,
+    last_message: Option<String>,
+    last_message_time_stamp: Option<chrono::NaiveDateTime>
+}
+
 #[derive(Debug, Serialize)]
 pub struct GetUserChatsResponse {
     response_status: ResponseStatus,
-    chats: Option<Vec<DirectChat>>,
+    direct_chats: Option<Vec<DirectChat>>,
+    group_chats: Option<Vec<GroupChat>>
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,43 +116,61 @@ pub async fn hello() -> &'static str {
 }
 
 pub async fn get_user_chats(State(state): State<Arc<ServerState>>, Json(payload): Json<GetUserChatsRequest>) -> impl IntoResponse {
+    let validated = common::validate_token(&state.db_pool, &payload.token).await;
+    
+    if validated.response_status.success == false {
+        return Json(GetUserChatsResponse{ response_status: ResponseStatus::fail("User not validated".into()), direct_chats: None, group_chats: None });
+    }
+
+    let user_id = validated.id;
+    
     let direct_chats_query = sqlx::query_as::<_, DirectChat>(
     r#"
-        SELECT 
-            dc.id AS chat_id,
-            CASE
-                WHEN dc.user_a_id = u.id THEN u2.username
-                ELSE u1.username
-            END AS chat_partner,
-            dc.last_message,
-            dc.last_message_time_stamp
+        SELECT dc.chat_id, u.username AS chat_partner, dc.last_message, dc.last_time_stamp AS last_message_time_stamp
         FROM direct_chats dc
-        JOIN users u1 ON dc.user_a_id = u1.id
-        JOIN users u2 ON dc.user_b_id = u2.id
-        JOIN users u ON u.user_token = $1
-        WHERE dc.user_a_id = u.id OR dc.user_b_id = u.id
-        ORDER BY dc.last_message_time_stamp DESC;
+        JOIN user_chats uc1 ON uc1.chat_id = dc.chat_id
+        JOIN user_chats uc2 ON uc2.chat_id = dc.chat_id
+        JOIN users u ON u.id = uc2.user_id
+        WHERE uc1.user_id = $1 AND uc2.user_id != $1;
     "#)
-    .bind(&payload.token)
+    .bind(user_id)
     .fetch_all(&state.db_pool)
     .await;
 
     let direct_chats = match direct_chats_query {
         Ok(chats) => chats,
         Err(error) => {
-            eprintln!("Error: Getting user direct chats failed for token {}, Error: {}", payload.token, error);
-            return Json(GetUserChatsResponse{ response_status: ResponseStatus::fail("Internal server error 1".into()), chats: None });
+            eprintln!("Error: Getting user chats failed while querying direct chats for token: {}, Error: {}", payload.token, error);
+            return Json(GetUserChatsResponse{ response_status: ResponseStatus::fail("Internal server error: 1".into()), direct_chats: None, group_chats: None });
         }
     };
 
-    Json(GetUserChatsResponse{ response_status: ResponseStatus::success(), chats: Some(direct_chats) })
-}
+    let group_chats_query = sqlx::query_as::<_, GroupChat>(
+    r#"
+        SELECT gc.chat_id, gc.title AS title, gc.last_message, gc.last_time_stamp AS last_message_time_stamp
+        FROM group_chats gc
+        JOIN user_chats uc ON uc.chat_id = gc.chat_id
+        WHERE uc.user_id = $1;
+    "#)
+    .bind(user_id)
+    .fetch_all(&state.db_pool)
+    .await;
 
+    let group_chats = match group_chats_query {
+        Ok(chats) => chats,
+        Err(error) => {
+            eprintln!("Error: Getting user chats failed while querying group chats for token: {}, Error: {}", payload.token, error);
+            return Json(GetUserChatsResponse{ response_status: ResponseStatus::fail("Internal server error: 2".into()), direct_chats: None, group_chats: None });
+        }
+    };
+
+    Json(GetUserChatsResponse{ response_status: ResponseStatus::success(), direct_chats: Some(direct_chats), group_chats: Some(group_chats) })
+}
 
 pub async fn get_direct_chat_history(State(state): State<Arc<ServerState>>, Json(payload): Json<GetDirectChatHistoryRequest>) -> impl IntoResponse {
     let validated = common::validate_token(&state.db_pool, &payload.token).await;
     
-    if validated.success == false {
+    if validated.response_status.success == false {
         return Json(GetDirectChatHistoryResponse::fail("Token validation failed".into()));
     }
 
