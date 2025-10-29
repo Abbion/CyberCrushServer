@@ -26,7 +26,7 @@ pub struct DirectChat {
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct GroupChat{
+pub struct GroupChat {
     chat_id: i32,
     title: String,
     last_message: Option<String>,
@@ -41,9 +41,10 @@ pub struct GetUserChatsResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct GetDirectChatHistoryRequest {
+pub struct GetChatHistoryRequest {
     token: String,
     chat_id: i32,
+    history_time_stamp: Option<chrono::NaiveDateTime>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -54,29 +55,66 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Serialize)]
-pub struct GetDirectChatHistoryResponse {
+pub struct GetChatHistoryResponse {
     response_status: ResponseStatus,
-    username_a: String,
-    username_b: String,
     messages: Vec<ChatMessage>,
 }
 
-impl GetDirectChatHistoryResponse {
-    fn fail(reason: &str) -> GetDirectChatHistoryResponse {
-        GetDirectChatHistoryResponse{
+impl GetChatHistoryResponse {
+    fn fail(reason: &str) -> GetChatHistoryResponse {
+        GetChatHistoryResponse{
             response_status: ResponseStatus::fail(reason.into()),
-            username_a: "".into(),
-            username_b: "".into(),
             messages: vec![] }
     }
 
-    fn success(username_a: String, username_b: String, messages: Vec<ChatMessage>) -> GetDirectChatHistoryResponse {
-        GetDirectChatHistoryResponse{
+    fn success(messages: Vec<ChatMessage>) -> GetChatHistoryResponse {
+        GetChatHistoryResponse{
             response_status: ResponseStatus::success(),
-            username_a,
-            username_b,
             messages }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetChatMetaDataRequest {
+    token: String,
+    chat_id: i32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DirectChatMetaData {
+    username_a: String,
+    username_b: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GroupChatMetaData {
+    admin_username: String,
+    members: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+enum ChatMetaData {
+    Direct(DirectChatMetaData),
+    Group(GroupChatMetaData),
+}
+
+#[derive(Debug, Serialize)]
+pub struct GetChatMetaDataResponse {
+    response_status: ResponseStatus,
+    chat_meta_data: Option<ChatMetaData>,
+}
+
+#[derive(Debug, Deserialize)]
+enum GroupMemberUpdate {
+    AddMember(String),
+    DeleteMember(String),
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateGroupChatMembers {
+    admin_token: String,
+    chat_id: i32,
+    update: GroupMemberUpdate,
 }
 
 #[derive(Debug, Deserialize)]
@@ -131,7 +169,7 @@ pub async fn get_user_chats(State(state): State<Arc<ServerState>>, Json(payload)
         JOIN user_chats uc1 ON uc1.chat_id = dc.chat_id
         JOIN user_chats uc2 ON uc2.chat_id = dc.chat_id
         JOIN users u ON u.id = uc2.user_id
-        WHERE uc1.user_id = $1 AND uc2.user_id != $1;
+        WHERE uc1.user_id = $1 AND uc2.user_id != $1
     "#)
     .bind(user_id)
     .fetch_all(&state.db_pool)
@@ -150,7 +188,7 @@ pub async fn get_user_chats(State(state): State<Arc<ServerState>>, Json(payload)
         SELECT gc.chat_id, gc.title AS title, gc.last_message, gc.last_time_stamp AS last_message_time_stamp
         FROM group_chats gc
         JOIN user_chats uc ON uc.chat_id = gc.chat_id
-        WHERE uc.user_id = $1;
+        WHERE uc.user_id = $1
     "#)
     .bind(user_id)
     .fetch_all(&state.db_pool)
@@ -167,76 +205,214 @@ pub async fn get_user_chats(State(state): State<Arc<ServerState>>, Json(payload)
     Json(GetUserChatsResponse{ response_status: ResponseStatus::success(), direct_chats: Some(direct_chats), group_chats: Some(group_chats) })
 }
 
-pub async fn get_direct_chat_history(State(state): State<Arc<ServerState>>, Json(payload): Json<GetDirectChatHistoryRequest>) -> impl IntoResponse {
+pub async fn get_chat_history(State(state): State<Arc<ServerState>>, Json(payload): Json<GetChatHistoryRequest>) -> impl IntoResponse {
     let validated = common::validate_token(&state.db_pool, &payload.token).await;
     
     if validated.response_status.success == false {
-        return Json(GetDirectChatHistoryResponse::fail("Token validation failed".into()));
+        return Json(GetChatHistoryResponse::fail("Token validation failed".into()));
     }
 
-    #[derive(Debug, sqlx::FromRow)]
-    struct ChatParticipantInfo {
-        user_a_username: String,
-        user_b_username: String,
-    }
-
-    let participant_info_query = sqlx::query_as::<_, ChatParticipantInfo>(
+    let membership_query = sqlx::query_scalar::<_, i32>(
     r#"
-        SELECT
-            ua.username AS user_a_username,
-            ub.username AS user_b_username
-        FROM direct_chats dc
-        JOIN users ua ON dc.user_a_id = ua.id
-        JOIN users ub ON dc.user_b_id = ub.id
-        WHERE dc.id = $1
+        SELECT 1 FROM user_chats WHERE chat_id = $1 AND user_id = $2      
     "#)
     .bind(payload.chat_id)
+    .bind(validated.id)
     .fetch_optional(&state.db_pool)
     .await;
 
-    let participant_info = match participant_info_query {
-        Ok(Some(info)) => info,
-        Ok(None) => {
-            return Json(GetDirectChatHistoryResponse::fail("Chat not found".into()));
-        }
+    let membership_check = match membership_query {
+        Ok(member) => member,
         Err(error) => {
-            eprintln!("Error: Getting user chat history failed 1 for token: {}, Error: {}", payload.token, error);
-            return Json(GetDirectChatHistoryResponse::fail("Internal server error: 1".into()));
+            eprintln!("Error: Checking user chat membership failed for token: {}, Error: {}", payload.token, error);
+            return Json(GetChatHistoryResponse::fail("Internal server error: 1".into()));
         }
     };
 
-    let chat_messages_query = sqlx::query_as::<_, ChatMessage>(
+    if membership_check.is_none() {
+        return Json(GetChatHistoryResponse::fail("Not a chat member".into()));
+    }
+
+    let message_query = match payload.history_time_stamp {
+        Some(time_stamp) => {
+            sqlx::query_as::<_, ChatMessage>(
+            r#"
+                SELECT u.username AS sender, m.content AS message, m.time_stamp
+                FROM chat_messages m
+                JOIN users u ON u.id = m.sender_id
+                WHERE m.chat_id = $1 AND m.time_stamp < $2
+                ORDER BY m.time_stamp DESC
+                LIMIT 50
+            "#)
+            .bind(payload.chat_id)
+            .bind(time_stamp)
+            .fetch_all(&state.db_pool)
+        },
+        None => {
+            sqlx::query_as::<_, ChatMessage>(
+            r#"
+                SELECT u.username AS sender, m.content AS message, m.time_stamp
+                FROM chat_messages m
+                JOIN users u ON u.id = m.sender_id
+                WHERE m.chat_id = $1
+                ORDER BY m.time_stamp DESC
+                LIMIT 50
+            "#)
+            .bind(payload.chat_id)
+            .fetch_all(&state.db_pool)
+        }
+    };
+
+    let response = match message_query.await {
+        Ok(mut messages) => {
+            messages.reverse();
+            GetChatHistoryResponse::success(messages)
+        },
+        Err(error) => {
+            eprintln!("Error: Getting user chat history failed for token: {}, Error: {}", payload.token, error);
+            GetChatHistoryResponse::fail("Internal server error: 2".into())
+        }
+    };
+    
+    Json(response)
+}
+
+pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(payload): Json<GetChatMetaDataRequest>) -> impl IntoResponse {
+    let validated = common::validate_token(&state.db_pool, &payload.token).await;
+    
+    if validated.response_status.success == false {
+        return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Token validation failed".into()), chat_meta_data:  None });
+    }
+
+    let membership_query = sqlx::query_scalar::<_, i32>(
     r#"
-        SELECT
-            u.username AS sender,
-            cm.message,
-            cm.time_stamp
-        FROM direct_chat_messages cm
-        JOIN users u ON cm.sender_id = u.id
-        WHERE cm.chat_id = $1
-        ORDER BY cm.time_stamp DESC
-        LIMIT 50
+        SELECT 1 FROM user_chats WHERE chat_id = $1 AND user_id = $2;        
     "#)
     .bind(payload.chat_id)
-    .fetch_all(&state.db_pool)
+    .bind(validated.id)
+    .fetch_optional(&state.db_pool)
     .await;
-    
-    let chat_messages = match chat_messages_query {
-        Ok(mut messages) => { 
-            messages.reverse();
-            messages
-        }
+
+    let membership_check = match membership_query {
+        Ok(member) => member,
         Err(error) => {
-            eprintln!("Error: Getting user chat history failed 2 for token: {}, Error: {}", payload.token, error);
-            return Json(GetDirectChatHistoryResponse::fail("Internal server error: 2".into()));
+            eprintln!("Error: Checking user chat membership failed for token: {}, Error: {}", payload.token, error);
+            return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 1".into()), chat_meta_data:  None });
         }
     };
 
-    Json(GetDirectChatHistoryResponse::success(
-            participant_info.user_a_username,
-            participant_info.user_b_username, 
-            chat_messages))
+    if membership_check.is_none() {
+        return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Not a chat member".into()), chat_meta_data:  None });
+    }
+    
+    let chat_type_query = sqlx::query_scalar::<_, i32>(
+    r#"
+        SELECT
+            CASE
+                WHEN EXISTS (SELECT 1 FROM direct_chats WHERE chat_id = $1) THEN 1
+                WHEN EXISTS (SELECT 1 FROM group_chats WHERE chat_id = $1) THEN 2
+                ELSE 0
+            END AS chat_type
+    "#)
+    .bind(payload.chat_id)
+    .fetch_one(&state.db_pool)
+    .await;
+
+    let chat_type = match chat_type_query {
+        Ok(chat_type) => chat_type,
+        Err(error) => {
+            eprintln!("Error: Getting chat type failed for chat id: {}, Error: {}", payload.chat_id, error);
+            return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 2".into()), chat_meta_data:  None });
+        }
+    };
+    
+    let response = match chat_type {
+        1 => { //Direct chat
+            let users_query = sqlx::query_scalar::<_, String>(
+            r#"
+                SELECT u.username FROM users u JOIN user_chats uc ON uc.user_id = u.id WHERE uc.chat_id = $1
+            "#)
+            .bind(payload.chat_id)
+            .fetch_all(&state.db_pool)
+            .await;
+            
+            //returns GetChatMetaDataResponse
+            match users_query {
+                Ok(users) => {
+                    if users.len() != 2 {
+                        GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Invalid user amount".into()), chat_meta_data: None }
+                    }
+                    else {
+                        let direct_chat_meta_data = ChatMetaData::Direct(DirectChatMetaData{ username_a: users[0].clone(), username_b: users[1].clone() });
+                        GetChatMetaDataResponse{ response_status: ResponseStatus::success(), chat_meta_data: Some(direct_chat_meta_data) }
+                    }
+                },
+                Err(error) => {
+                    eprintln!("Error: Getting direct chat members usernames failed for chat id: {}, Error: {}", payload.chat_id, error);
+                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 3".into()), chat_meta_data:  None });
+                }
+            }
+        },
+        2 => { //Group chat
+            let admin_query = sqlx::query_scalar::<_, String>(
+            r#"
+                SELECT u.username AS username
+                FROM group_chats gc
+                JOIN users u ON u.id = gc.admin_id
+                WHERE gc.chat_id = $1
+            "#
+            )
+            .bind(payload.chat_id)
+            .fetch_optional(&state.db_pool)
+            .await;
+
+            let admin_username = match admin_query {
+                Ok(admin_username) => { 
+                    match admin_username {
+                        Some(username) => username,
+                        None => {
+                            return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Admin not found".into()), chat_meta_data:  None });
+                        }
+                    }
+                },
+                Err(error) => {
+                    eprintln!("Error: Getting group chat admin username failed for chat id: {}, Error: {}", payload.chat_id, error);
+                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 4".into()), chat_meta_data:  None });
+                }
+            };
+
+            let members_query = sqlx::query_scalar::<_, String>(
+            r#"
+                SELECT u.username
+                FROM user_chats uc
+                JOIN users u ON u.id = uc.user_id
+                WHERE uc.chat_id = $1
+            "#)
+            .bind(payload.chat_id)
+            .fetch_all(&state.db_pool)
+            .await;
+            
+            match members_query {
+                Ok(members) => {
+                    let group_chat_meta_data = ChatMetaData::Group(GroupChatMetaData{ admin_username, members });
+                    GetChatMetaDataResponse{ response_status: ResponseStatus::success(), chat_meta_data: Some(group_chat_meta_data) }
+                },
+                Err(error) => {
+                    eprintln!("Error: Getting group chat members failed for chat id: {}, Error: {}", payload.chat_id, error);
+                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 5".into()), chat_meta_data:  None });
+                }
+            }
+        },
+        _ => {
+            GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Invalid chat type".into()), chat_meta_data:  None }
+        }
+    };
+
+    Json(response)
 }
+
+//create_new_group_chat
+//update_group_memebers
 
 pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(payload): Json<CreateNewDirectChatRequest>) -> impl IntoResponse {
     let sender_id_query = sqlx::query_scalar::<_, i32>(

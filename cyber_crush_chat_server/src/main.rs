@@ -29,7 +29,8 @@ async fn main() {
     let app = Router::new()
         .route("/hello", get(chat_request_component::hello))
         .route("/get_user_chats", post(chat_request_component::get_user_chats))
-        .route("/get_direct_chat_history", post(chat_request_component::get_direct_chat_history))
+        .route("/get_chat_history", post(chat_request_component::get_chat_history))
+        .route("/get_chat_metadata", post(chat_request_component::get_chat_metadata))
         .route("/create_new_direct_chat", post(chat_request_component::create_new_direct_chat))
         .route("/web_socket", get(chat_realtime_component::web_socket_handler))
         .with_state(server_state.clone());
