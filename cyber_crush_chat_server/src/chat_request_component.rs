@@ -123,33 +123,46 @@ use ResponseStatus as UpdateGroupChatMemberResponse;
 #[derive(Debug, Deserialize)]
 pub struct CreateNewDirectChatRequest {
     token: String,
-    receiver_username: String,
+    partner_username: String,
+    first_message: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct CreateNewDirectChatResponse {
     response_status: ResponseStatus,
-    chat_id: i32,
+    chat_id: Option<i32>,
 }
 
 impl CreateNewDirectChatResponse {
     fn fail(reason: &str) -> CreateNewDirectChatResponse {
         CreateNewDirectChatResponse{
             response_status: ResponseStatus::fail(reason.into()),
-            chat_id: -1 }
+            chat_id: None }
     }
 
     fn success(chat_id: i32) -> CreateNewDirectChatResponse {
         CreateNewDirectChatResponse{
             response_status: ResponseStatus::success(),
-            chat_id }
+            chat_id: Some(chat_id) }
     }
 
     fn chat_exists(chat_id: i32) -> CreateNewDirectChatResponse {
         CreateNewDirectChatResponse{
             response_status: ResponseStatus::fail("Direct chat already exsits!".into()),
-            chat_id }
+            chat_id: Some(chat_id) }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateNewGroupChatRequest {
+    token: String,
+    title: String
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateNewGroupChatResponse {
+    response_status: ResponseStatus,
+    chat_id: Option<i32>,
 }
 
 pub async fn hello() -> &'static str {
@@ -489,93 +502,125 @@ pub async fn update_group_chat_member(State(state): State<Arc<ServerState>>, Jso
     }
 }
 
-//create_new_group_chat
-
 pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(payload): Json<CreateNewDirectChatRequest>) -> impl IntoResponse {
-    let sender_id_query = sqlx::query_scalar::<_, i32>(
-        "SELECT id FROM users WHERE user_token = $1"
-    )
-    .bind(&payload.token)
-    .fetch_optional(&state.db_pool)
-    .await;
+    let validated = common::validate_token(&state.db_pool, &payload.token).await;
+    
+    if validated.response_status.success == false {
+        return Json(CreateNewDirectChatResponse::fail("Token validation failed".into()));
+    }
 
-    let sender_id = match sender_id_query {
-        Ok(Some(id)) => id,
-        Ok(None) => {
-            return Json(CreateNewDirectChatResponse::fail("User not validated!"));
-        },
+    let sender_id = validated.id.unwrap();
+
+    let partner_id = common::get_user_id_by_username(&state.db_pool, &payload.partner_username).await;
+
+    if partner_id.response_status.success == false {
+        return Json(CreateNewDirectChatResponse::fail("Partner does not exist".into()));
+    }
+
+    let partner_id = partner_id.id.unwrap();
+
+    let mut transaction = match state.db_pool.begin().await {
+        Ok(tx) => tx,
         Err(error) => {
-            eprintln!("Error: Creating direct chat failed while getting the sender id for token: {} and receiver: {}, Error: {}",
-                      payload.token, payload.receiver_username, error);
-            return Json(CreateNewDirectChatResponse::fail("Internal server error 1"));
+            eprintln!("Error: Creating new direct chat failed while creating transaction for token: {}, Error: {}", payload.token, error);
+            return Json(CreateNewDirectChatResponse::fail("Internal server error: 1".into()));
         }
     };
 
-    let receiver_id_query = sqlx::query_scalar::<_, i32>(
-        "SELECT id FROM users WHERE username = $1"
-    )
-    .bind(&payload.receiver_username)
-    .fetch_optional(&state.db_pool)
-    .await;
-
-    let receiver_id = match receiver_id_query {
-        Ok(Some(id)) => id,
-        Ok(None) => {
-            return Json(CreateNewDirectChatResponse::fail("Receiver not found!"));
-        },
-        Err(error) => {
-            eprintln!("Error: Creating direct chat failed while getting the receiver id for token: {} and receiver: {}, Error: {}",
-                      payload.token, payload.receiver_username, error);
-            return Json(CreateNewDirectChatResponse::fail("Internal server error 2"));
-        }
-    };
-
-    let min_id = cmp::min(sender_id, receiver_id);
-    let max_id = cmp::max(sender_id, receiver_id);
-
-    let find_direct_chat_query = sqlx::query_scalar::<_, i32>(
-        "SELECT id FROM direct_chats WHERE user_a_id = $1 AND user_b_id = $2"
-    )
-    .bind(&min_id)
-    .bind(&max_id)
-    .fetch_optional(&state.db_pool)
-    .await;
-
-    match find_direct_chat_query {
-        Ok(Some(id)) => {
-            return Json(CreateNewDirectChatResponse::chat_exists(id));
-        },
-        Ok(None) => (),
-        Err(error) => {
-            eprintln!("Error: Creating direct chat failed while checking if direct chat exists for token: {} and sender: {}, Error: {}", 
-                      payload.token, payload.receiver_username, error);
-            return Json(CreateNewDirectChatResponse::fail("Internal server error 3"));
-        }
-    };
-
-    // Info: On conflict we do a simple do update, that does nothing.
-    // This enables the query to return chat id
-    // If 'DO UPDATE SET' would be replaced by 'DO NOTHING', the query would return NULL
-    let create_new_direct_chat_query = sqlx::query_scalar::<_, i32>(
+    let chat_instance_check_query = sqlx::query_scalar::<_, i32>(
     r#"
-        INSERT INTO direct_chats (user_a_id, user_b_id, last_message, last_message_time_stamp)
-        VALUES ($1, $2, NULL, NULL)
-        ON CONFLICT (user_a_id, user_b_id) DO UPDATE SET user_a_id = EXCLUDED.user_a_id
-        RETURNING id
+        SELECT dc.chat_id
+        FROM direct_chats dc
+        JOIN user_chats uc1 ON uc1.chat_id = dc.chat_id
+        JOIN user_chats uc2 ON uc2.chat_id = dc.chat_id
+        WHERE uc1.user_id = $1 AND uc2.user_id = $2
     "#)
-    .bind(&min_id)
-    .bind(&max_id)
-    .fetch_one(&state.db_pool)
+    .bind(sender_id)
+    .bind(partner_id)
+    .fetch_optional(&mut *transaction)
     .await;
 
-    let response = match create_new_direct_chat_query {
-        Ok(id) => CreateNewDirectChatResponse::success(id),
+    if let Ok(Some(chat_id)) = chat_instance_check_query {
+        let _ = transaction.rollback().await;
+        return Json(CreateNewDirectChatResponse::chat_exists(chat_id));
+    }
+    
+    let chat_id_query = sqlx::query_scalar::<_, i32>(
+    r#"
+        INSERT INTO chats DEFAULT VALUES RETURNING id
+    "#)
+    .fetch_one(&mut *transaction)
+    .await;
+
+    let chat_id = match chat_id_query {
+        Ok(id) => id,
         Err(error) => {
-            eprintln!("Error: Creating direct chat failed while inserting a new direct chat for token: {} and sender: {}, Error: {}", 
-                      payload.token, payload.receiver_username, error);
-            CreateNewDirectChatResponse::fail("Internal server error 4")
+            eprintln!("Error: Creating new direct chat failed while creating new chat for token: {}, Error: {}", payload.token, error);
+            let _ = transaction.rollback().await;
+            return Json(CreateNewDirectChatResponse::fail("Internal server error: 2"));
         }
     };
 
-    Json(response)
+    let add_chat_for_users_query = sqlx::query(
+    r#"
+        INSERT INTO user_chats (chat_id, user_id) VALUES ($1 $2), ($1, $3)
+    "#)
+    .bind(chat_id)
+    .bind(sender_id)
+    .bind(partner_id)
+    .execute(&mut *transaction)
+    .await;
+
+    if let Err(error) = add_chat_for_users_query {
+        eprintln!("Error: Creating new direct chat failed while attaching to users for sender id: {} and partner id: {}, Error: {}", sender_id, partner_id, error);
+        let _ = transaction.rollback().await;
+        return Json(CreateNewDirectChatResponse::fail("Internal server error: 3"));
+    }
+
+    let time_stamp = chrono::Utc::now().naive_utc();
+    let add_first_message_query = sqlx::query(
+    r#"
+        INSERT INTO chat_messages (chat_id, sender_id, content, time_stamp)
+        VALUES ($1, $2, $3, $4)
+    "#)
+    .bind(chat_id)
+    .bind(sender_id)
+    .bind(payload.first_message.clone())
+    .bind(time_stamp)
+    .execute(&mut *transaction)
+    .await;
+
+    if let Err(error) = add_first_message_query {
+        eprintln!("Error: Creating new direct chat failed while adding first message to a new direct chat for sender id: {} and partner id: {}, Error: {}", sender_id, partner_id, error);
+        let _ = transaction.rollback().await;
+        return Json(CreateNewDirectChatResponse::fail("Internal server error: 4"));
+    }
+    
+    let create_direct_chat_query = sqlx::query(
+    r#"
+        INSERT INTO direct_chats (chat_id, last_message, last_time_stamp)
+        VALUES ($1, $2, $3)
+    "#)
+    .bind(chat_id)
+    .bind(payload.first_message)
+    .bind(time_stamp)
+    .execute(&mut *transaction)
+    .await;
+
+    if let Err(error) = create_direct_chat_query {
+        eprintln!("Error: Creating new direct chat failed for sender id: {} and partner id: {}, Error: {}", sender_id, partner_id, error);
+        let _ = transaction.rollback().await;
+        return Json(CreateNewDirectChatResponse::fail("Internal server error: 5"));
+    }
+
+    if let Err(error) = transaction.commit().await {
+        eprintln!("Error: Creating new direct chat failed while commiting transaction for sender id: {} and partner id: {}, Error: {}", sender_id, partner_id, error);
+        return Json(CreateNewDirectChatResponse::fail("Internal server error: 5"));
+    }
+
+    Json(CreateNewDirectChatResponse::success(chat_id))
 }
+/*
+pub async fn create_new_group_chat(State(state): State<Arc<ServerState>>, Json(payload): Json<CreateNewGroupChatRequest>) -> impl IntoResponse {
+}
+*/
