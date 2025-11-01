@@ -105,17 +105,20 @@ pub struct GetChatMetaDataResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(tag = "action", content = "username")]
 enum GroupMemberUpdate {
     AddMember(String),
     DeleteMember(String),
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UpdateGroupChatMembers {
+pub struct UpdateGroupChatMemberRequest {
     admin_token: String,
     chat_id: i32,
     update: GroupMemberUpdate,
 }
+
+use ResponseStatus as UpdateGroupChatMemberResponse;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateNewDirectChatRequest {
@@ -160,7 +163,7 @@ pub async fn get_user_chats(State(state): State<Arc<ServerState>>, Json(payload)
         return Json(GetUserChatsResponse{ response_status: ResponseStatus::fail("User not validated".into()), direct_chats: None, group_chats: None });
     }
 
-    let user_id = validated.id;
+    let user_id = validated.id.unwrap();
     
     let direct_chats_query = sqlx::query_as::<_, DirectChat>(
     r#"
@@ -411,8 +414,82 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
     Json(response)
 }
 
+pub async fn update_group_chat_member(State(state): State<Arc<ServerState>>, Json(payload): Json<UpdateGroupChatMemberRequest>) -> impl IntoResponse {
+    let validated = common::validate_token(&state.db_pool, &payload.admin_token).await;
+    
+    if validated.response_status.success == false {
+        return Json(UpdateGroupChatMemberResponse::fail("Token validation failed".into()));
+    }
+
+    let validate_admin_query = sqlx::query_scalar::<_, i64>(
+    r#"
+        SELECT COUNT(*) FROM group_chats WHERE chat_id = $1 AND admin_id = $2
+    "#)
+    .bind(payload.chat_id)
+    .bind(validated.id)
+    .fetch_one(&state.db_pool)
+    .await;
+
+    match validate_admin_query {
+        Ok(0) => {
+            return Json(UpdateGroupChatMemberResponse::fail("Not a group admin".into()))
+        },
+        Err(error) => {
+            eprintln!("Error: Group member update failed for token: {}, Error: {}", payload.admin_token, error);
+            return Json(UpdateGroupChatMemberResponse::fail("Internal server error: 1".into()))
+        },
+        _ => {}
+    }
+
+    match payload.update {
+        GroupMemberUpdate::AddMember(username) => {
+            let add_member_query = sqlx::query(
+            r#"
+                INSERT INTO user_chats (chat_id, user_id) 
+                VALUES (
+                    $1,
+                    (SELECT id FROM users WHERE username = $2)
+                )
+                ON CONFLICT DO NOTHING
+            "#)
+            .bind(payload.chat_id)
+            .bind(&username)
+            .execute(&state.db_pool)
+            .await;
+            
+            match add_member_query {
+                Ok(_) => Json(UpdateGroupChatMemberResponse::success()),
+                Err(error) => {
+                    eprintln!("Error: Group member update failed to add a new member for user: {} and chat id: {}, Error: {}", username, payload.chat_id, error);
+                    Json(UpdateGroupChatMemberResponse::fail("Internal server error: 2".into()))
+                }
+            }
+        },
+        GroupMemberUpdate::DeleteMember(username) => {
+            let delete_member_query = sqlx::query(
+            r#"
+                DELETE FROM user_chats 
+                WHERE chat_id = $1 
+                    AND user_id = (SELECT id FROM users WHERE username = $2)
+                    AND user_id NOT IN (SELECT admin_id FROM group_chats WHERE chat_id = $1)
+            "#)
+            .bind(payload.chat_id)
+            .bind(&username)
+            .execute(&state.db_pool)
+            .await;
+
+            match delete_member_query {
+                Ok(_) => Json(UpdateGroupChatMemberResponse::success()),
+                Err(error) => {
+                    eprintln!("Error: Group member update failed to delete member for user: {} and chat_id: {}, Error: {}", username, payload.chat_id, error);
+                    Json(UpdateGroupChatMemberResponse::fail("Internal server error: 3".into()))
+                }
+            }
+        }
+    }
+}
+
 //create_new_group_chat
-//update_group_memebers
 
 pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(payload): Json<CreateNewDirectChatRequest>) -> impl IntoResponse {
     let sender_id_query = sqlx::query_scalar::<_, i32>(

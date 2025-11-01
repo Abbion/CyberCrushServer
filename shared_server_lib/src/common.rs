@@ -28,6 +28,8 @@ pub struct ValidateTokenResponse {
     pub id : Option<i32>
 }
 
+use ValidateTokenResponse as UserIdByUsernameResponse;
+
 pub async fn validate_token(db_pool: &PgPool, token: &String) -> ValidateTokenResponse {
     let token_validation_query = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE user_token = $1")
         .bind(token)
@@ -40,6 +42,22 @@ pub async fn validate_token(db_pool: &PgPool, token: &String) -> ValidateTokenRe
         Err(error) => {
             eprintln!("Error: Failed to validate token {}: {}", token, error);
             ValidateTokenResponse{ response_status: ResponseStatus::fail("Token validation server internal error.".into()), id: None }
+        }
+    }
+}
+
+pub async fn get_user_id_by_username(db_pool: &PgPool, username: &String) -> UserIdByUsernameResponse {
+    let user_id_query = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE username = $1")
+        .bind(username)
+        .fetch_optional(db_pool)
+        .await;
+
+    match user_id_query {
+        Ok(Some(id)) => UserIdByUsernameResponse{ response_status: ResponseStatus::success(), id: Some(id) },
+        Ok(None) => UserIdByUsernameResponse{ response_status: ResponseStatus::fail("User not found".into()), id: None },
+        Err(error) => {
+            eprintln!("Error Failed to get user id by username: {}, Error: {}", username, error);
+            UserIdByUsernameResponse{ response_status: ResponseStatus::fail("User not found internal server error".into()), id: None }
         }
     }
 }
