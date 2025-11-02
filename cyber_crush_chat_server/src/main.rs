@@ -33,6 +33,7 @@ async fn main() {
         .route("/get_chat_metadata", post(chat_request_component::get_chat_metadata))
         .route("/update_group_chat_member", post(chat_request_component::update_group_chat_member))
         .route("/create_new_direct_chat", post(chat_request_component::create_new_direct_chat))
+        .route("/create_new_group_chat", post(chat_request_component::create_new_group_chat))
         .route("/web_socket", get(chat_realtime_component::web_socket_handler))
         .with_state(server_state.clone());
 

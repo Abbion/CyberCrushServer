@@ -563,7 +563,7 @@ pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(
 
     let add_chat_for_users_query = sqlx::query(
     r#"
-        INSERT INTO user_chats (chat_id, user_id) VALUES ($1 $2), ($1, $3)
+        INSERT INTO user_chats (chat_id, user_id) VALUES ($1, $2), ($1, $3)
     "#)
     .bind(chat_id)
     .bind(sender_id)
@@ -620,7 +620,77 @@ pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(
 
     Json(CreateNewDirectChatResponse::success(chat_id))
 }
-/*
+
 pub async fn create_new_group_chat(State(state): State<Arc<ServerState>>, Json(payload): Json<CreateNewGroupChatRequest>) -> impl IntoResponse {
+    let validated = common::validate_token(&state.db_pool, &payload.token).await;
+    
+    if validated.response_status.success == false {
+        return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Token validation failed".into()), chat_id: None });
+    }
+
+    let admin_id = validated.id.unwrap();
+
+    let mut transaction = match state.db_pool.begin().await {
+        Ok(tx) => tx,
+        Err(error) => {
+            eprintln!("Error: Creating new direct chat failed while creating transaction for token: {}, Error: {}", payload.token, error);
+            return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Internal server error: 1".into()), chat_id: None });
+        }
+    };
+
+    let chat_id_query = sqlx::query_scalar::<_, i32>(
+    r#"
+        INSERT INTO chats DEFAULT VALUES RETURNING id
+    "#)
+    .fetch_one(&mut *transaction)
+    .await;
+
+    let chat_id = match chat_id_query {
+        Ok(id) => id,
+        Err(error) => {
+            eprintln!("Error: Creating new group chat failed while creating new chat for token: {}, Error: {}", payload.token, error);
+            let _ = transaction.rollback().await;
+            return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Internal server error: 2".into()), chat_id: None });
+        }
+    };
+
+    let assign_admin_to_chat_query = sqlx::query(
+    r#"
+        INSERT INTO user_chats (chat_id, user_id) VALUES ($1, $2)
+    "#)
+    .bind(chat_id)
+    .bind(admin_id)
+    .execute(&mut *transaction)
+    .await;
+
+    if let Err(error) = assign_admin_to_chat_query {
+        eprintln!("Error: Creating new group chat failed while attaching admin for id: {}, Error: {}", admin_id, error);
+        let _ = transaction.rollback().await;
+        return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Internal server error: 3".into()), chat_id: None });
+    }
+
+    let create_group_chat_query = sqlx::query(
+    r#"
+        INSERT INTO group_chats (chat_id, admin_id, title, last_message, last_time_stamp)
+        VALUES ($1, $2, $3, NULL, NULL)
+    "#)
+    .bind(chat_id)
+    .bind(admin_id)
+    .bind(payload.title)
+    .execute(&mut *transaction)
+    .await;
+
+    if let Err(error) = create_group_chat_query {
+        eprintln!("Error: Creating new group chat failed for id: {}, Error: {}", admin_id, error);
+        let _ = transaction.rollback().await;
+        return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Internal server error: 4".into()), chat_id: None })
+    }
+
+    if let Err(error) = transaction.commit().await {
+        eprintln!("Error: Creating new group chat failed while commiting transaction for id: {}, Error: {}", admin_id, error);
+        return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Internal server error: 5".into()), chat_id: None });
+    }
+
+    Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::success(), chat_id: Some(chat_id) })
 }
-*/
+
