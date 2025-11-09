@@ -1,0 +1,24 @@
+[
+    {
+	"username" : "Amadeus",
+	"current_funds" : 1500,
+	"transactions" : [
+	    { "receiver" : "Karma", "message" : "pc parts", "amount" : 750, "time_stamp" : "2025-09-30 17:42:12" },
+	    { "receiver" : "Victor", "message" : "Bills", "amount" : 241, "time_stamp" : "2025-10-01 6:32:04" }
+    	]
+    },
+    {
+	"username" : "Victor",
+	"current_funds" : 2750,
+	"transactions" : [
+	    { "receiver" : "Amadeus", "message" : "dj-set fix", "amount": 300, "time_stamp": "2025-10-03 12:34:08" }
+	]
+    },
+    {
+	"username" : "Karma",
+	"current_funds" : 420,
+	"transactions" : [
+	    { "receiver" : "Amadeus", "message" : "cracked software", "amount": 250, "time_stamp" : "2025-10-04 13:17:04" }	
+	]
+    }
+]

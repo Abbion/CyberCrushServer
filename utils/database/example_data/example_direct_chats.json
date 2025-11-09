@@ -1,0 +1,16 @@
+[
+    {
+	"user_a" : "Amadeus",
+	"user_b" : "Karma",
+	"messages" : [
+	    { "sender" : "a", "content" : "Got your stuff, where are you?", "time_stamp" : "2025-10-04 13:12:20" },
+	    { "sender" : "a", "content" : "No", "time_stamp" : "2025-10-04 13:16:31" },
+	    { "sender" : "a", "content" : "First send me the money", "time_stamp" : "2025-10-04 13:16:42" },
+	    { "sender" : "a", "content" : "I have hidden it in the pot", "time_stamp" : "2025-10-04 13:20:01" },
+	    { "sender" : "b", "content" : "Leave it in the pot", "time_stamp" : "2025-10-04 13:15:42" },
+	    { "sender" : "b", "content" : "Tomorrow I will send you the money", "time_stamp" : "2025-10-04 13:16:01" },
+	    { "sender" : "b", "content" : "Fuck you", "time_stamp" : "2025-10-04 13:18:13" },
+	    { "sender" : "b", "content" : "I hope you choke on it", "time_stamp" : "2025-10-04 13:18:33" }
+	]
+    }
+]

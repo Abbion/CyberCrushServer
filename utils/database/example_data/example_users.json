@@ -3,17 +3,11 @@
         "username" : "Amadeus",
         "password" : "Hexe4?",
         "extra_data" : {
-            "job" : "wizzard",
+            "job" : "wizard",
 	    "race" : "orc",
 	    "sex" : "male",
-	    "gang" : "post fronst"
-        },
-	"bank_account" : {
-	    "funds" : 1500
-	},
-	"bank_transactions" : [
-	    { "receiver" : "Karma", "message" : "pc parts", "amount": "750", "time_stamp" : "2025-09-30 17:42:12" }
-	]
+	    "gang" : "post frost"
+        }
     },
     {
         "username" : "Victor",
@@ -24,13 +18,7 @@
 	    "gang" : "shadow rest",
 	    "addict" : true,
 	    "anger issues" : true
-        },
-	"bank_account" : {
-	    "funds" : 2750 
-	},
-	"bank_transactions" : [
-	    { "receiver" : "Amadeus", "message" : "dj-set fix", "amount": 300, "time_stamp": "2025-10-03 12:34:08" }
-	]
+        }
     },
     {
         "username" : "Karma",
@@ -40,11 +28,6 @@
 	    "race" : "human",
 	    "blood curse" : true,
 	    "age" : 68
-        },
-	"bank_account" : {
-	    "funds" : 420
-	},
-	"bank_transactions" : [
-    	]
+        }
     }
 ]

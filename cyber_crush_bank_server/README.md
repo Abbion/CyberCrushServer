@@ -23,13 +23,16 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Output**
     ```json
     {
-      "success": "true/false",
-      "message": "string",
+      "response_status":
+      {
+        "success": "true/false",
+        "message": "string"
+      },
       "funds": "i32"
     }
 - **Description**
-    - Returns `true` with the user's funds if token is valid.
-    - Returns `false` with -1 funds if no data is found or if a server error occurs.
+    - Returns `true` status with the user's funds if token is valid.
+    - Returns `false` status with -1 funds if no data is found or if a server error occurs.
 
 ### **POST** `/get_user_transaction_history`
 - **Input**
@@ -40,9 +43,12 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Output**
     ```json
     {
-      "success": "true/false",
-      "message": "string",
-      "transactions" : [
+      "response_status":
+      {
+        "success": "true/false",
+        "message": "string"
+      },
+      "transactions": [
         {
           "sernder_username": "string",
           "receiver_username": "string",
@@ -53,8 +59,8 @@ This server connects to a PostgreSQL database and requires proper configuration 
       ]
     }
 - **Description**
-    - Returns `true` with the user's list of transactions ordered by `time_stamp` if token is valid.
-    - Returns `false` with an empty list of transactions if no data is found or if a server error occurs.
+    - Returns `true` status with the user's list of transactions ordered by `time_stamp` if token is valid.
+    - Returns `false` status with an empty list of transactions if no data is found or if a server error occurs.
 
 ### **Post** `/transfer_funds`
 - **Input**
@@ -68,9 +74,12 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Output**
     ```json
     {
-      "success": "true/false",
-      "message": "string"
+      "response_status":
+      {
+        "success": "true/false",
+        "message": "string"
+      }
     }
 - **Description**
-    - Returns `true` if the token is valid and the transaction passes.
-    - Returns `false` if transaction can't be completed (token is not valid, insufficient user funds, receiver does not exist, or an internal server error occurs)
+    - Returns `true` status if the token is valid and the transaction passes.
+    - Returns `false` status if transaction can't be completed (token is not valid, insufficient user funds, receiver does not exist, or an internal server error occurs)

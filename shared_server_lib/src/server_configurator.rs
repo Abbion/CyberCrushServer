@@ -12,7 +12,8 @@ pub struct ServerConfiguration {
     server_address: String,
     authentication_server_port: u16,
     data_server_port: u16,
-    bank_server_port: u16
+    bank_server_port: u16,
+    chat_server_port: u16
 }
 
 pub enum ServerType {
@@ -44,7 +45,7 @@ impl ServerConfiguration {
             ServerType::Authentication => format!("{}:{}", self.server_address, self.authentication_server_port),
             ServerType::Data => format!("{}:{}", self.server_address, self.data_server_port),
             ServerType::Bank => format!("{}:{}", self.server_address, self.bank_server_port),
-            ServerType::Chat => "".to_string(),
+            ServerType::Chat => format!("{}:{}", self.server_address, self.chat_server_port),
         };
 
         addr_str.parse().expect("Invalid ip address")

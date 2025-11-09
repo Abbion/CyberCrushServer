@@ -1,4 +1,4 @@
-use shared_server_lib::{server_configurator::{ServerConfiguration, ServerType}, server_database};
+use shared_server_lib::{server_configurator::{ServerConfiguration, ServerType}, server_database, common, common::ResponseStatus};
 
 use axum::{
     extract::{Json, State},
@@ -23,20 +23,8 @@ struct LoginRequest {
 
 #[derive(Debug, Serialize)]
 struct LoginResponse {
-    success: bool,
-    message: String,
+    response_status: ResponseStatus,
     token: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ValidateTokenRequest {
-    token: String,
-}
-
-#[derive(Debug, Serialize)]
-struct ValidateTokenResponse {
-    success: bool,
-    message: String
 }
 
 #[derive(Debug)]
@@ -88,54 +76,38 @@ async fn login(State(state): State<Arc<ServerState>>, Json(payload): Json<LoginR
 
             if verified.is_err() {
                 eprintln!("Error: Login failed for user: {}. Error: {}", payload.username, verified.unwrap_err());
-                LoginResponse{ success: false, message: "Password decodeing error.".into(), token: "".into() }
+                LoginResponse{ response_status: ResponseStatus::fail("Password decodeing error.".into()), token: "".into() }
             }
             else if verified.unwrap() == true {
                 match generate_and_store_token(&state.db_pool, password_query.id).await {
                     Ok(token) => {
-                        LoginResponse{ success: true, message: "success".into(), token: token }
+                        LoginResponse{ response_status: ResponseStatus::success(), token: token }
                     },
                     Err(error) => {
-                        LoginResponse{ success: false, message: error, token: "".into() }
+                        eprintln!("Error: Login failed. Error: {}", error);
+                        LoginResponse{ response_status: ResponseStatus::fail("Internal server error".into()), token: "".into() }
                     }
                 }
             }
             else {
-                LoginResponse{ success: false, message: "Wrong credentials.".into(), token: "".into() }
+                LoginResponse{ response_status: ResponseStatus::fail("Wrong credentials.".into()), token: "".into() }
             }
         },
         Ok(None) => { 
-            LoginResponse{ success: false, message: "User not found.".into(), token: "".into() } 
+            LoginResponse{ response_status: ResponseStatus::fail("User not found.".into()), token: "".into() } 
         },
         Err(error) => {
             eprintln!("Error: Login failed for user: {}. Error: {}", payload.username, error);
-            LoginResponse{ success: false, message: "Login database error.".into(), token: "".into() }
+            LoginResponse{ response_status: ResponseStatus::fail("Login database error.".into()), token: "".into() }
         }
     };
 
     Json(response)
 }
 
-async fn validate_token(State(state): State<Arc<ServerState>>, Json(payload): Json<ValidateTokenRequest>) -> impl IntoResponse {
-    let token_validation_query = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE user_token = $1")
-        .bind(&payload.token)
-        .fetch_optional(&state.db_pool)
-        .await;
-
-    let response = match token_validation_query {
-        Ok(Some(_)) => {
-                ValidateTokenResponse{ success: true, message: "success".into() }
-        },
-        Ok(None) => {
-            ValidateTokenResponse{ success: false, message: "Token not validated".into() }
-        },
-        Err(error) => {
-            eprintln!("Error: Failed to validate token {}: {}", payload.token, error);
-            ValidateTokenResponse{ success: false, message: "Token validation error.".into() }
-        }
-    };
-
-    Json(response)
+async fn validate_token(State(state): State<Arc<ServerState>>, Json(payload): Json<common::ValidateTokenRequest>) -> impl IntoResponse {
+    let validation = common::validate_token(&state.db_pool, &payload.token).await;
+    Json(validation.response_status)
 }
 
 fn verify_password(stored_hash: &str, password: &str, pepper: &str) -> Result<bool, password_hash::Error> {
