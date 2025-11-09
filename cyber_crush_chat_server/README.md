@@ -94,17 +94,22 @@ This server connects to a PostgreSQL database and requires proper configuration 
     },
     "metadata": "Option<ChatMetaData>"
   }
+  ```
 
+  ```json
   ChatMetaData
   {
     "Direct/Group": "DirectChatMetaData/GroupChatMetaData"
   }
-  
+  ```
+
+  ```json
   DirectChatMetaData
   {
     "username_a": "string",
     "username_b": "string"
   }
+  ```
   
   GroupChatMetaData
   {
