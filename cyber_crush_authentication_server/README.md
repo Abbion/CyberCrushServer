@@ -24,13 +24,16 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Output**
     ```json
     {
-      "success": "true/false",
-      "message": "string",
+      "response_status": 
+      {
+        "success": "true/false",
+        "message": "string"
+      },
       "token": "string (if success)"
     }
 - **Description**
-    - Returns `true` and a `token` if login is successful.
-    - Returns `false` and an error message if login fails.
+    - Returns `true` status and a `token` if login is successful.
+    - Returns `false` status and an error message if login fails.
 ---
 ### **POST** `/validate_token`
 - **Input**
@@ -41,9 +44,12 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Output**
     ```json
     {
-      "success": "true/false",
-      "message": "string"
+      "response_status": 
+      {
+        "success": "true/false",
+        "message": "string"
+      }
     }
 - **Description**
-    - Returns `true` if the token is valid.
-    - Returns `false` with an error message if the token is invalid.
+    - Returns `true` status if the token is valid.
+    - Returns `false` status with an error message if the token is invalid.

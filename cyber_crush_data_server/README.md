@@ -20,13 +20,16 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Output:**
   ```json
   {
-    "success": "true/false",
-    "message": "string",
-    "usernames": ["string", "string", "..."]
+    "response_status": 
+    {
+      "success": "true/false",
+      "message": "string"
+    },
+    "usernames": ["string"]
   }
 - **Description**
-    - Returns `true` with a list of usernames if successful.
-    - Returns `false` with an error message if the database query fails.
+    - Returns `true` status with a list of usernames if successful.
+    - Returns `false` status with an error message if the database query fails.
 ---
 ### **POST** `/get_user_data`
 - **Input**
@@ -37,12 +40,15 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Output**
   ```json
   {
-    "success": "true/false",
-    "message": "string",
+    "response_status": 
+    {
+      "success": "true/false",
+      "message": "string"
+    },
     "username": "string",
     "personal_number": "string",
     "extra_data": "json-string"
   }
  - **Description**
-    - Returns `true` with the user's data if token is valid.
-    - Returns `false` with an error message if no data is found or if a server error occurs.
+    - Returns `true` status with the user's data if token is valid.
+    - Returns `false` status with an error message if no data is found or if a server error occurs.

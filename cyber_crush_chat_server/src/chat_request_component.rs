@@ -101,7 +101,7 @@ enum ChatMetaData {
 #[derive(Debug, Serialize)]
 pub struct GetChatMetaDataResponse {
     response_status: ResponseStatus,
-    chat_meta_data: Option<ChatMetaData>,
+    metadata: Option<ChatMetaData>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -297,7 +297,7 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
     let validated = common::validate_token(&state.db_pool, &payload.token).await;
     
     if validated.response_status.success == false {
-        return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Token validation failed".into()), chat_meta_data:  None });
+        return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Token validation failed".into()), metadata:  None });
     }
 
     let membership_query = sqlx::query_scalar::<_, i32>(
@@ -313,18 +313,18 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
         Ok(member) => member,
         Err(error) => {
             eprintln!("Error: Checking user chat membership failed for user id: {:?} and chat id: {}, error: {}", validated.id, payload.chat_id, error);
-            return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 1".into()), chat_meta_data:  None });
+            return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 1".into()), metadata:  None });
         }
     };
 
     if membership_check.is_none() {
-        return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Not a chat member".into()), chat_meta_data:  None });
+        return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Not a chat member".into()), metadata:  None });
     }
     
     let chat_type = match common_chat::get_chat_type(&state.db_pool, payload.chat_id).await {
         Ok(chat_type) => chat_type,
         Err(error) => {
-            return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail(error), chat_meta_data:  None });
+            return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail(error), metadata:  None });
         }
     };
 
@@ -342,16 +342,16 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
                 Ok(users) => users,
                 Err(error) => {
                     eprintln!("Error: Getting direct chat members usernames failed for chat id: {}, error: {}", payload.chat_id, error);
-                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 3".into()), chat_meta_data:  None });
+                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 3".into()), metadata:  None });
                 }
             };
 
             if users.len() != 2 {
-                return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Invalid user amount".into()), chat_meta_data: None });
+                return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Invalid user amount".into()), metadata: None });
             }
 
-            let direct_chat_meta_data = ChatMetaData::Direct(DirectChatMetaData{ username_a: users[0].clone(), username_b: users[1].clone() });
-            GetChatMetaDataResponse{ response_status: ResponseStatus::success(), chat_meta_data: Some(direct_chat_meta_data) }
+            let direct_chat_metadata = ChatMetaData::Direct(DirectChatMetaData{ username_a: users[0].clone(), username_b: users[1].clone() });
+            GetChatMetaDataResponse{ response_status: ResponseStatus::success(), metadata: Some(direct_chat_metadata) }
         },
         ChatType::Group => {
             let admin_query = sqlx::query_scalar::<_, String>(
@@ -369,11 +369,11 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
             let admin_username = match admin_query {
                 Ok(Some(username)) => username,
                 Ok(None) => {
-                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Admin not found".into()), chat_meta_data:  None });
+                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Admin not found".into()), metadata:  None });
                 },
                 Err(error) => {
                     eprintln!("Error: Getting group chat admin username failed for chat id: {}, error: {}", payload.chat_id, error);
-                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 4".into()), chat_meta_data:  None });
+                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 4".into()), metadata:  None });
                 }
             };
 
@@ -391,11 +391,11 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
             match members_query {
                 Ok(members) => {
                     let group_chat_meta_data = ChatMetaData::Group(GroupChatMetaData{ admin_username, members });
-                    GetChatMetaDataResponse{ response_status: ResponseStatus::success(), chat_meta_data: Some(group_chat_meta_data) }
+                    GetChatMetaDataResponse{ response_status: ResponseStatus::success(), metadata: Some(group_chat_meta_data) }
                 },
                 Err(error) => {
                     eprintln!("Error: Getting group chat members failed for chat id: {}, error: {}", payload.chat_id, error);
-                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 5".into()), chat_meta_data:  None });
+                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 5".into()), metadata:  None });
                 }
             }
         }

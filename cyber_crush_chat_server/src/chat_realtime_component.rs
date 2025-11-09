@@ -59,7 +59,7 @@ pub async fn handle_socket(web_socket: WebSocket, state: Arc<ServerState>) {
     state.token_to_chat_id.insert(connection_data.token.clone(), connection_data.chat_id);
     state.chat_connections.entry(connection_data.chat_id).or_default().push((connection_data.user_id, sending_channel.clone()));
 
-    let connection_success_response = ChatResponse::Info{ text: format!("User connected to chat!") };
+    let connection_success_response = ChatResponse::Info{ text: "User connected to chat!".into() };
     ws_send_chat_response(&mut sender, &connection_success_response).await;
     
     //Thread that sends messages from the channel to the websocket client
