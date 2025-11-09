@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use chrono;
 
-use crate::common_chat::ServerState;
+use crate::common_chat::{ ServerState, ChatType };
+use crate::common_chat;
 
 #[derive(Debug, Deserialize)]
 pub struct GetUserChatsRequest {
@@ -193,7 +194,7 @@ pub async fn get_user_chats(State(state): State<Arc<ServerState>>, Json(payload)
     let direct_chats = match direct_chats_query {
         Ok(chats) => chats,
         Err(error) => {
-            eprintln!("Error: Getting user chats failed while querying direct chats for token: {}, Error: {}", payload.token, error);
+            eprintln!("Error: Getting user chats failed while querying direct chats for user id: {}, error: {}", user_id, error);
             return Json(GetUserChatsResponse{ response_status: ResponseStatus::fail("Internal server error: 1".into()), direct_chats: None, group_chats: None });
         }
     };
@@ -212,7 +213,7 @@ pub async fn get_user_chats(State(state): State<Arc<ServerState>>, Json(payload)
     let group_chats = match group_chats_query {
         Ok(chats) => chats,
         Err(error) => {
-            eprintln!("Error: Getting user chats failed while querying group chats for token: {}, Error: {}", payload.token, error);
+            eprintln!("Error: Getting user chats failed while querying group chats for user id: {}, error: {}", user_id, error);
             return Json(GetUserChatsResponse{ response_status: ResponseStatus::fail("Internal server error: 2".into()), direct_chats: None, group_chats: None });
         }
     };
@@ -239,7 +240,7 @@ pub async fn get_chat_history(State(state): State<Arc<ServerState>>, Json(payloa
     let membership_check = match membership_query {
         Ok(member) => member,
         Err(error) => {
-            eprintln!("Error: Checking user chat membership failed for token: {}, Error: {}", payload.token, error);
+            eprintln!("Error: Checking user chat membership failed for user id: {:?} in chat id {}, Error: {}", validated.id, payload.chat_id, error);
             return Json(GetChatHistoryResponse::fail("Internal server error: 1".into()));
         }
     };
@@ -284,7 +285,7 @@ pub async fn get_chat_history(State(state): State<Arc<ServerState>>, Json(payloa
             GetChatHistoryResponse::success(messages)
         },
         Err(error) => {
-            eprintln!("Error: Getting user chat history failed for token: {}, Error: {}", payload.token, error);
+            eprintln!("Error: Getting user chat history failed for user id: {:?} and chat id: {}, error: {}", validated.id, payload.chat_id, error);
             GetChatHistoryResponse::fail("Internal server error: 2".into())
         }
     };
@@ -311,7 +312,7 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
     let membership_check = match membership_query {
         Ok(member) => member,
         Err(error) => {
-            eprintln!("Error: Checking user chat membership failed for token: {}, Error: {}", payload.token, error);
+            eprintln!("Error: Checking user chat membership failed for user id: {:?} and chat id: {}, error: {}", validated.id, payload.chat_id, error);
             return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 1".into()), chat_meta_data:  None });
         }
     };
@@ -320,29 +321,15 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
         return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Not a chat member".into()), chat_meta_data:  None });
     }
     
-    let chat_type_query = sqlx::query_scalar::<_, i32>(
-    r#"
-        SELECT
-            CASE
-                WHEN EXISTS (SELECT 1 FROM direct_chats WHERE chat_id = $1) THEN 1
-                WHEN EXISTS (SELECT 1 FROM group_chats WHERE chat_id = $1) THEN 2
-                ELSE 0
-            END AS chat_type
-    "#)
-    .bind(payload.chat_id)
-    .fetch_one(&state.db_pool)
-    .await;
-
-    let chat_type = match chat_type_query {
+    let chat_type = match common_chat::get_chat_type(&state.db_pool, payload.chat_id).await {
         Ok(chat_type) => chat_type,
         Err(error) => {
-            eprintln!("Error: Getting chat type failed for chat id: {}, Error: {}", payload.chat_id, error);
-            return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 2".into()), chat_meta_data:  None });
+            return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail(error), chat_meta_data:  None });
         }
     };
-    
+
     let response = match chat_type {
-        1 => { //Direct chat
+        ChatType::Direct => {
             let users_query = sqlx::query_scalar::<_, String>(
             r#"
                 SELECT u.username FROM users u JOIN user_chats uc ON uc.user_id = u.id WHERE uc.chat_id = $1
@@ -351,24 +338,22 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
             .fetch_all(&state.db_pool)
             .await;
             
-            //returns GetChatMetaDataResponse
-            match users_query {
-                Ok(users) => {
-                    if users.len() != 2 {
-                        GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Invalid user amount".into()), chat_meta_data: None }
-                    }
-                    else {
-                        let direct_chat_meta_data = ChatMetaData::Direct(DirectChatMetaData{ username_a: users[0].clone(), username_b: users[1].clone() });
-                        GetChatMetaDataResponse{ response_status: ResponseStatus::success(), chat_meta_data: Some(direct_chat_meta_data) }
-                    }
-                },
+            let users = match users_query {
+                Ok(users) => users,
                 Err(error) => {
-                    eprintln!("Error: Getting direct chat members usernames failed for chat id: {}, Error: {}", payload.chat_id, error);
+                    eprintln!("Error: Getting direct chat members usernames failed for chat id: {}, error: {}", payload.chat_id, error);
                     return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 3".into()), chat_meta_data:  None });
                 }
+            };
+
+            if users.len() != 2 {
+                return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Invalid user amount".into()), chat_meta_data: None });
             }
+
+            let direct_chat_meta_data = ChatMetaData::Direct(DirectChatMetaData{ username_a: users[0].clone(), username_b: users[1].clone() });
+            GetChatMetaDataResponse{ response_status: ResponseStatus::success(), chat_meta_data: Some(direct_chat_meta_data) }
         },
-        2 => { //Group chat
+        ChatType::Group => {
             let admin_query = sqlx::query_scalar::<_, String>(
             r#"
                 SELECT u.username AS username
@@ -382,16 +367,12 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
             .await;
 
             let admin_username = match admin_query {
-                Ok(admin_username) => { 
-                    match admin_username {
-                        Some(username) => username,
-                        None => {
-                            return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Admin not found".into()), chat_meta_data:  None });
-                        }
-                    }
+                Ok(Some(username)) => username,
+                Ok(None) => {
+                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Admin not found".into()), chat_meta_data:  None });
                 },
                 Err(error) => {
-                    eprintln!("Error: Getting group chat admin username failed for chat id: {}, Error: {}", payload.chat_id, error);
+                    eprintln!("Error: Getting group chat admin username failed for chat id: {}, error: {}", payload.chat_id, error);
                     return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 4".into()), chat_meta_data:  None });
                 }
             };
@@ -413,13 +394,10 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
                     GetChatMetaDataResponse{ response_status: ResponseStatus::success(), chat_meta_data: Some(group_chat_meta_data) }
                 },
                 Err(error) => {
-                    eprintln!("Error: Getting group chat members failed for chat id: {}, Error: {}", payload.chat_id, error);
+                    eprintln!("Error: Getting group chat members failed for chat id: {}, error: {}", payload.chat_id, error);
                     return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 5".into()), chat_meta_data:  None });
                 }
             }
-        },
-        _ => {
-            GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Invalid chat type".into()), chat_meta_data:  None }
         }
     };
 
@@ -447,7 +425,7 @@ pub async fn update_group_chat_member(State(state): State<Arc<ServerState>>, Jso
             return Json(UpdateGroupChatMemberResponse::fail("Not a group admin".into()))
         },
         Err(error) => {
-            eprintln!("Error: Group member update failed for token: {}, Error: {}", payload.admin_token, error);
+            eprintln!("Error: Group member update failed for user id: {:?} and chat id: {}, error: {}", validated.id, payload.chat_id, error);
             return Json(UpdateGroupChatMemberResponse::fail("Internal server error: 1".into()))
         },
         _ => {}
@@ -472,7 +450,7 @@ pub async fn update_group_chat_member(State(state): State<Arc<ServerState>>, Jso
             match add_member_query {
                 Ok(_) => Json(UpdateGroupChatMemberResponse::success()),
                 Err(error) => {
-                    eprintln!("Error: Group member update failed to add a new member for user: {} and chat id: {}, Error: {}", username, payload.chat_id, error);
+                    eprintln!("Error: Group member update failed to add a new member for user: {} and chat id: {}, error: {}", username, payload.chat_id, error);
                     Json(UpdateGroupChatMemberResponse::fail("Internal server error: 2".into()))
                 }
             }
@@ -493,7 +471,7 @@ pub async fn update_group_chat_member(State(state): State<Arc<ServerState>>, Jso
             match delete_member_query {
                 Ok(_) => Json(UpdateGroupChatMemberResponse::success()),
                 Err(error) => {
-                    eprintln!("Error: Group member update failed to delete member for user: {} and chat_id: {}, Error: {}", username, payload.chat_id, error);
+                    eprintln!("Error: Group member update failed to delete member for user: {} and chat_id: {}, error: {}", username, payload.chat_id, error);
                     Json(UpdateGroupChatMemberResponse::fail("Internal server error: 3".into()))
                 }
             }
@@ -521,7 +499,7 @@ pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(
     let mut transaction = match state.db_pool.begin().await {
         Ok(tx) => tx,
         Err(error) => {
-            eprintln!("Error: Creating new direct chat failed while creating transaction for token: {}, Error: {}", payload.token, error);
+            eprintln!("Error: Creating new direct chat failed while creating transaction for user id: {}, error: {}", sender_id, error);
             return Json(CreateNewDirectChatResponse::fail("Internal server error: 1".into()));
         }
     };
@@ -554,7 +532,7 @@ pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(
     let chat_id = match chat_id_query {
         Ok(id) => id,
         Err(error) => {
-            eprintln!("Error: Creating new direct chat failed while creating new chat for token: {}, Error: {}", payload.token, error);
+            eprintln!("Error: Creating new direct chat failed while creating new chat for user id: {}, error: {}", sender_id, error);
             let _ = transaction.rollback().await;
             return Json(CreateNewDirectChatResponse::fail("Internal server error: 2"));
         }
@@ -571,7 +549,7 @@ pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(
     .await;
 
     if let Err(error) = add_chat_for_users_query {
-        eprintln!("Error: Creating new direct chat failed while attaching to users for sender id: {} and partner id: {}, Error: {}", sender_id, partner_id, error);
+        eprintln!("Error: Creating new direct chat failed while attaching to users for sender id: {} and partner id: {}, error: {}", sender_id, partner_id, error);
         let _ = transaction.rollback().await;
         return Json(CreateNewDirectChatResponse::fail("Internal server error: 3"));
     }
@@ -590,7 +568,7 @@ pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(
     .await;
 
     if let Err(error) = add_first_message_query {
-        eprintln!("Error: Creating new direct chat failed while adding first message to a new direct chat for sender id: {} and partner id: {}, Error: {}", sender_id, partner_id, error);
+        eprintln!("Error: Creating new direct chat failed while adding first message to a new direct chat for sender id: {} and partner id: {}, error: {}", sender_id, partner_id, error);
         let _ = transaction.rollback().await;
         return Json(CreateNewDirectChatResponse::fail("Internal server error: 4"));
     }
@@ -607,13 +585,13 @@ pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(
     .await;
 
     if let Err(error) = create_direct_chat_query {
-        eprintln!("Error: Creating new direct chat failed for sender id: {} and partner id: {}, Error: {}", sender_id, partner_id, error);
+        eprintln!("Error: Creating new direct chat failed for sender id: {} and partner id: {}, error: {}", sender_id, partner_id, error);
         let _ = transaction.rollback().await;
         return Json(CreateNewDirectChatResponse::fail("Internal server error: 5"));
     }
 
     if let Err(error) = transaction.commit().await {
-        eprintln!("Error: Creating new direct chat failed while commiting transaction for sender id: {} and partner id: {}, Error: {}", sender_id, partner_id, error);
+        eprintln!("Error: Creating new direct chat failed while commiting transaction for sender id: {} and partner id: {}, error: {}", sender_id, partner_id, error);
         return Json(CreateNewDirectChatResponse::fail("Internal server error: 5"));
     }
 
@@ -632,7 +610,7 @@ pub async fn create_new_group_chat(State(state): State<Arc<ServerState>>, Json(p
     let mut transaction = match state.db_pool.begin().await {
         Ok(tx) => tx,
         Err(error) => {
-            eprintln!("Error: Creating new direct chat failed while creating transaction for token: {}, Error: {}", payload.token, error);
+            eprintln!("Error: Creating new direct chat failed while creating transaction for user id: {}, error: {}", admin_id, error);
             return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Internal server error: 1".into()), chat_id: None });
         }
     };
@@ -647,7 +625,7 @@ pub async fn create_new_group_chat(State(state): State<Arc<ServerState>>, Json(p
     let chat_id = match chat_id_query {
         Ok(id) => id,
         Err(error) => {
-            eprintln!("Error: Creating new group chat failed while creating new chat for token: {}, Error: {}", payload.token, error);
+            eprintln!("Error: Creating new group chat failed while creating new chat for user id: {}, error: {}", admin_id, error);
             let _ = transaction.rollback().await;
             return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Internal server error: 2".into()), chat_id: None });
         }
@@ -663,7 +641,7 @@ pub async fn create_new_group_chat(State(state): State<Arc<ServerState>>, Json(p
     .await;
 
     if let Err(error) = assign_admin_to_chat_query {
-        eprintln!("Error: Creating new group chat failed while attaching admin for id: {}, Error: {}", admin_id, error);
+        eprintln!("Error: Creating new group chat failed while attaching admin for user id: {}, error: {}", admin_id, error);
         let _ = transaction.rollback().await;
         return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Internal server error: 3".into()), chat_id: None });
     }
@@ -680,13 +658,13 @@ pub async fn create_new_group_chat(State(state): State<Arc<ServerState>>, Json(p
     .await;
 
     if let Err(error) = create_group_chat_query {
-        eprintln!("Error: Creating new group chat failed for id: {}, Error: {}", admin_id, error);
+        eprintln!("Error: Creating new group chat failed for user id: {}, error: {}", admin_id, error);
         let _ = transaction.rollback().await;
         return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Internal server error: 4".into()), chat_id: None })
     }
 
     if let Err(error) = transaction.commit().await {
-        eprintln!("Error: Creating new group chat failed while commiting transaction for id: {}, Error: {}", admin_id, error);
+        eprintln!("Error: Creating new group chat failed while commiting transaction for user id: {}, error: {}", admin_id, error);
         return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Internal server error: 5".into()), chat_id: None });
     }
 
