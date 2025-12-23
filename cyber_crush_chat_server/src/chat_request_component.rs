@@ -124,7 +124,7 @@ use ResponseStatus as UpdateGroupChatMemberResponse;
 pub struct CreateNewDirectChatRequest {
     token: String,
     partner_username: String,
-    first_message: String,
+    creation_message: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -156,7 +156,8 @@ impl CreateNewDirectChatResponse {
 #[derive(Debug, Deserialize)]
 pub struct CreateNewGroupChatRequest {
     token: String,
-    title: String
+    title: String,
+    creation_message: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -555,31 +556,14 @@ pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(
     }
 
     let time_stamp = chrono::Utc::now().naive_utc();
-    let add_first_message_query = sqlx::query(
-    r#"
-        INSERT INTO chat_messages (chat_id, sender_id, content, time_stamp)
-        VALUES ($1, $2, $3, $4)
-    "#)
-    .bind(chat_id)
-    .bind(sender_id)
-    .bind(payload.first_message.clone())
-    .bind(time_stamp)
-    .execute(&mut *transaction)
-    .await;
 
-    if let Err(error) = add_first_message_query {
-        eprintln!("Error: Creating new direct chat failed while adding first message to a new direct chat for sender id: {} and partner id: {}, error: {}", sender_id, partner_id, error);
-        let _ = transaction.rollback().await;
-        return Json(CreateNewDirectChatResponse::fail("Internal server error: 4"));
-    }
-    
     let create_direct_chat_query = sqlx::query(
     r#"
         INSERT INTO direct_chats (chat_id, last_message, last_time_stamp)
         VALUES ($1, $2, $3)
     "#)
     .bind(chat_id)
-    .bind(payload.first_message)
+    .bind(payload.creation_message)
     .bind(time_stamp)
     .execute(&mut *transaction)
     .await;
@@ -587,7 +571,7 @@ pub async fn create_new_direct_chat(State(state): State<Arc<ServerState>>, Json(
     if let Err(error) = create_direct_chat_query {
         eprintln!("Error: Creating new direct chat failed for sender id: {} and partner id: {}, error: {}", sender_id, partner_id, error);
         let _ = transaction.rollback().await;
-        return Json(CreateNewDirectChatResponse::fail("Internal server error: 5"));
+        return Json(CreateNewDirectChatResponse::fail("Internal server error: 4"));
     }
 
     if let Err(error) = transaction.commit().await {
@@ -645,15 +629,19 @@ pub async fn create_new_group_chat(State(state): State<Arc<ServerState>>, Json(p
         let _ = transaction.rollback().await;
         return Json(CreateNewGroupChatResponse{ response_status: ResponseStatus::fail("Internal server error: 3".into()), chat_id: None });
     }
+    
 
+    let time_stamp = chrono::Utc::now().naive_utc();
     let create_group_chat_query = sqlx::query(
     r#"
         INSERT INTO group_chats (chat_id, admin_id, title, last_message, last_time_stamp)
-        VALUES ($1, $2, $3, NULL, NULL)
+        VALUES ($1, $2, $3, $4, $5)
     "#)
     .bind(chat_id)
     .bind(admin_id)
     .bind(payload.title)
+    .bind(payload.creation_message)
+    .bind(time_stamp)
     .execute(&mut *transaction)
     .await;
 

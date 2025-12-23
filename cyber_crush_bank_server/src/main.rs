@@ -213,11 +213,11 @@ async fn transfer_funds(State(state): State<Arc<ServerState>>, Json(payload): Js
     .bind(sender_account.id)
     .execute(&mut *transaction)
     .await;
-    
+
     match subtract_funds_query {
         Ok(result) => {
             if result.rows_affected() == 0 {
-                return Json(TransferFundsResponse::fail("Not enouch funds".into()));
+                return Json(TransferFundsResponse::fail("Not enough funds".into()));
             }
             if result.rows_affected() != 1 {
                 eprintln!("Error: Transfering funds failed too may rows affected while subtracting funds!");
