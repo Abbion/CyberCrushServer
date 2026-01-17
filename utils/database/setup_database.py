@@ -140,6 +140,18 @@ def init_db():
         
         db_cursor.execute(user_id_to_chat_id_index)
 
+        news_articles_table_query = sql.SQL("""
+            CREATE TABLE IF NOT EXISTS news_articles (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                title VARCHAR(64) NOT NULL,
+                content TEXT,
+                timestamp TIMESTAMP
+            );
+        """)
+
+        db_cursor.execute(news_articles_table_query)
+
         db_connection.commit()
     except Exception:
         if db_connection:

@@ -22,6 +22,7 @@ pub struct ValidateTokenRequest {
     pub token: String,
 }
 
+//TODO rename to a general id response name like UserIdResponse
 #[derive(Debug)]
 pub struct ValidateTokenResponse {
     pub response_status: ResponseStatus,
@@ -57,7 +58,7 @@ pub async fn get_user_id_by_username(db_pool: &PgPool, username: &String) -> Use
         Ok(None) => UserIdByUsernameResponse{ response_status: ResponseStatus::fail("User not found".into()), id: None },
         Err(error) => {
             eprintln!("Error Failed to get user id by username: {}, Error: {}", username, error);
-            UserIdByUsernameResponse{ response_status: ResponseStatus::fail("User not found internal server error".into()), id: None }
+            UserIdByUsernameResponse{ response_status: ResponseStatus::fail("User not found. Internal server error".into()), id: None }
         }
     }
 }

@@ -287,12 +287,40 @@ def load_group_chat_data(group_chat_data_path, username_to_id_map, db_connection
         if db_connection:
             db_cursor.close()
 
+def load_news_articles_data(news_articles_data_path, username_to_id_map, db_connection):
+    with open(news_articles_data_path, "r", encoding="utf-8") as file:
+        news_articles = json.load(file)
+
+    try:
+        db_cursor = db_connection.cursor()
+
+        insert_news_article_sql = """INSERT INTO news_articles (user_id, title, content, timestamp)
+                                        VALUES (%s, %s, %s, %s);"""
+        for article in news_articles:
+            poster_username = article["username"]
+            user_id = username_to_id_map[poster_username]
+            title = article["title"]
+            content = article["content"]
+            timestamp = article["timestamp"]
+
+            insert_news_article_params = (user_id, title, content, timestamp)
+            db_cursor.execute(insert_news_article_sql, insert_news_article_params)
+
+    except Exception:
+        if db_connection:
+            db_connection.rollback()
+        raise
+    finally:
+        if db_connection:
+            db_cursor.close()
+
 def main():
     parser = argparse.ArgumentParser(description = "Loads user data to the database from .json files")
     parser.add_argument("-u", help = "users .json file", required=True)
     parser.add_argument("-b", help = "banking .json file")
     parser.add_argument("-dc", help = "direct chats .json file")
     parser.add_argument("-gc", help = "group chats .json file")
+    parser.add_argument("-na", help = "news articles .json file")
     args = parser.parse_args()
 
     setup_configuration()
@@ -325,6 +353,11 @@ def main():
         print("Loading group chat data...")
         group_chat_data_path = args.gc
         load_group_chat_data(group_chat_data_path, username_to_id_map, db_connection)
+
+    if args.na:
+        print("Loading news articles data...")
+        news_articles_data_path = args.na
+        load_news_articles_data(news_articles_data_path, username_to_id_map, db_connection)
     
     db_connection.commit()
     db_connection.close()
