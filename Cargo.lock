@@ -351,6 +351,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cyber_crush_news_server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "serde",
+ "serde_json",
+ "shared_server_lib",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "dashmap"
 version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

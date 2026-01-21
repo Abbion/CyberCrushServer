@@ -13,18 +13,20 @@ pub struct ServerConfiguration {
     authentication_server_port: u16,
     data_server_port: u16,
     bank_server_port: u16,
-    chat_server_port: u16
+    chat_server_port: u16,
+    news_server_port: u16,
 }
 
 pub enum ServerType {
     Authentication,
     Data,
     Bank,
-    Chat
+    Chat,
+    News
 }
 
 impl ServerConfiguration {
-    pub fn get_posgres_connection_url(&self) -> String {
+    pub fn get_postgres_connection_url(&self) -> String {
         format!("postgres://{}:{}@{}/{}", self.database_admin_username, self.database_admin_password, self.database_url, self.database_name)
     }
 
@@ -46,6 +48,7 @@ impl ServerConfiguration {
             ServerType::Data => format!("{}:{}", self.server_address, self.data_server_port),
             ServerType::Bank => format!("{}:{}", self.server_address, self.bank_server_port),
             ServerType::Chat => format!("{}:{}", self.server_address, self.chat_server_port),
+            ServerType::News => format!("{}:{}", self.server_address, self.news_server_port),
         };
 
         addr_str.parse().expect("Invalid ip address")

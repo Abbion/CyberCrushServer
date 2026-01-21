@@ -15,7 +15,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
 
 ### **POST** `/get_user_funds`
 
-- Input:
+- **Input**:
     ```json
     {
       "token": "string"

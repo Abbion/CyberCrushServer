@@ -18,7 +18,7 @@ use crate::common_chat::ServerState;
 #[tokio::main]
 async fn main() {
     let server_configuration = ServerConfiguration::load("../server.conf");
-    let db_pool = server_database::connect_to_database(server_configuration.get_posgres_connection_url()).await;
+    let db_pool = server_database::connect_to_database(server_configuration.get_postgres_connection_url()).await;
     let server_state = Arc::new(ServerState{ db_pool, token_to_chat_id: Arc::new(DashMap::new()), chat_connections: Arc::new(DashMap::new()) });
 
     let socket_addr = server_configuration.get_socket_addr(ServerType::Chat);
