@@ -37,7 +37,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
     - Returns `true` status with a list of 75 latests news articles ordered by `timestamp`
     - Returns `false` status with an empty list of articles if an server error occurs.
 
-### **Post** `/post_news_article`
+### **POST** `/post_news_article`
 - **Input**
     ```json
     {
