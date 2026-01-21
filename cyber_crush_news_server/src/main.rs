@@ -15,7 +15,7 @@ use chrono;
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 struct NewsArticleEntry {
-    username: String, //Publisher
+    author: String,
     title: String,
     content: String,
     timestamp: chrono::NaiveDateTime,
@@ -69,7 +69,7 @@ async fn get_news_feed(State(state): State<Arc<ServerState>>) -> impl IntoRespon
     let news_articles_query = sqlx::query_as::<_, NewsArticleEntry>(
     r#"
         SELECT
-            pub.username,
+            pub.username as author,
             na.title,
             na.content,
             na.timestamp
