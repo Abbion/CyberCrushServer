@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>Cyber crush user creator</title>
         <meta charset="UTF-8">
+        <title>Cyber crush user creator</title>
     </head>
     <style>
         body {
@@ -32,7 +32,7 @@
             display: grid;
             grid-template-columns: 1fr;
         }
-        .custom_value_field {
+        .custom_attribute_field {
             margin-bottom: 0.25em;
             padding: 0.25em;
             border-width: 0.25em;
@@ -42,67 +42,103 @@
             display: grid;
             grid-template-columns: 1fr;
         }
-        .custom_value_field > button {
+        .custom_attribute_field > button {
             width: 10em;
         }
-        #custom_values {
+        #custom_attribute_list {
             margin-top: 1em;
         }
     </style>
     <script defer>
-        var form_edited = false
-        var custom_value_id_counter = 0
-        var all_users = {}
+        var unsaved_changes = false
+        var custom_attribute_id_counter = 0
+        var saved_users = {}
 
         function new_user() {
-            if (form_edited) {
-                if (!confirm("Czy chcesz utworzyć nowego użytkownika nie zapisując zmian obecnego? Ok aby porzucić zmiany.")) {
+            if (unsaved_changes) {
+                // Do you want to create a new user without saveing current changes? Ok to discard changes.
+                if (!confirm("Czy chcesz utworzyć nowego użytkownika nie zapisując zmian obecnego? Ok, aby porzucić zmiany.")) {
                     return
                 }
             }
-
+            
+            clear_selected_user()
             clear_form()
         }
         function save_user() {
-            let user_data = validate_form()
+            const user_data = validate_form()
             if (user_data === null) {
                 return
             }
 
-            form_edited = false
-            let username = user_data["username"]
+            unsaved_changes = false
+            const username = user_data["username"]
 
-            //Update user data
-            if (username in all_users) {
-                all_users[username] = user_data
-            }
-            //Insert new user
-            else {
-                all_users[username] = user_data
-
+            // If the new user was not in the saved users list
+            if (!(username in saved_users)) {
                 let new_user_option = document.createElement("option")
                 new_user_option.value = username
                 new_user_option.innerHTML = username
                 users_list.append(new_user_option)
             }
+
+            saved_users[username] = user_data
+        }
+        function remove_user() {
+            const users_list = document.getElementById("users_list")
+            const index = users_list.selectedIndex
+
+            if (!confirm("Czy na pewno chcesz usunąć użytkownika: " + users_list.options[index].value + "?"))
+                return
+
+            if (index > -1) {
+                users_list.remove(index)
+                clear_form()
+            }
         }
         function export_to_file() {
+            if (unsaved_changes) {
+                // New changes will not be saved to file. Ok to continue export process
+                if (!confirm("Nie zapisano zmian przed eksportem. Ok, aby kontynuować eskportowanie."))
+                    return
+            }
+
+            let users_list = []
+            for (const [key, value] of Object.entries(saved_users)) {
+                users_list.push(value)
+            }
+
+            const json_string = JSON.stringify(users_list, null, 4)
+            const blob = new Blob([json_string], { type: 'application/json' })
+
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+
+            link.href = url
+            link.download = 'dane_eksport.json'
+
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(url)
         }
         async function import_from_file(file_input) {
             let  users_list = document.getElementById("users_list");
 
             if (users_list.options.length > 0) {
-                if (!confirm("Importujesz nowe dane, wszystkie obecnie utworzone zostaną stracone. Aby ich nie stracić anuluj i eksportuj dane. Ok aby kontynuować wczytywanie.")) {
+                // Importing new data, all currently stored data will be lost. To not lose your data cancel the import and export the data. Ok to continue importing
+                if (!confirm("Importujesz nowe dane, wszystkie obecnie utworzone zostaną stracone. Aby ich nie stracić anuluj i eksportuj dane. Ok, aby kontynuować wczytywanie.")) {
                     return
                 }
             }
             
             clear_form()
             users_list.options.length = 0
-            all_users = {}
+            saved_users = {}
 
             let file = file_input.files[0]
             if (!file) {
+                // Failed to import file
                 alert("Nie udało się zaimportować pliku")
                 return
             }
@@ -113,7 +149,7 @@
 
                 for (let user of users_data) {
                     let username = user["username"]
-                    all_users[username] = user;
+                    saved_users[username] = user;
 
                     let new_user_option = document.createElement("option")
                     new_user_option.value = username
@@ -122,34 +158,39 @@
                 }
             }
             catch (error) {
+                // Error occured while loading file
                 console.error("Błąd podczas odczytu pliku:", error);
-                alert("Wystąpił błąd: Plik może mieć nieprawidłowy format JSON.");
+                // The file might have incorrect json format
+                alert("Plik może mieć nieprawidłowy format JSON.");
             }
 
         }
         function import_button_clicked() {
             document.getElementById("import_file_input").click()
         } 
-        function add_user_custom_value() {
-            var custom_value = document.createElement("div");
-            custom_value.id = "custom_value_field_" + custom_value_id_counter
-            custom_value.className = "custom_value_field"
-            custom_value.innerHTML += "<button onClick=\"remove_user_custom_value(this)\">Usuń wartość</button>"
-            custom_value.innerHTML += "<label>Nazwa wartości</label>"
-            custom_value.innerHTML += "<input id=custom_value_name_" + custom_value_id_counter + ">"
-            custom_value.innerHTML += "<label>Wartość</label>"
-            custom_value.innerHTML += "<input id=custom_value_content_" + custom_value_id_counter + ">"
+        function add_custom_attribute() {
+            let custom_attribute = document.createElement("div");
+            custom_attribute.className = "custom_attribute_field"
+            custom_attribute.innerHTML += "<button onClick=\"remove_custom_attribute(this)\">Usuń atrybut</button>"
+                                        // Attribute name
+            custom_attribute.innerHTML += "<label>Nazwa atrybutu</label>"
+            custom_attribute.innerHTML += "<input id=custom_attribute_name_" + custom_attribute_id_counter + ">"
+                                        // Attribute value
+            custom_attribute.innerHTML += "<label>Wartość</label>"
+            custom_attribute.innerHTML += "<input id=custom_attribute_content_" + custom_attribute_id_counter + ">"
 
-            var custom_values = document.getElementById("custom_values")
-            custom_values.append(custom_value)
+            let custom_attribute_list = document.getElementById("custom_attribute_list")
+            custom_attribute_list.append(custom_attribute)
 
-            custom_value_id_counter += 1
+            custom_attribute_id_counter += 1
         }
-        function remove_user_custom_value(button) {
+        function remove_custom_attribute(button) {
             button.parentElement.remove()
         }
         function clear_form() {
-            var form = document.getElementById("user_data_form")
+            unsaved_changes = false
+
+            let form = document.getElementById("user_data_form")
             if (form === null) {
                 return
             }
@@ -159,19 +200,20 @@
             clear_input(form, "surname_input")
             clear_input(form, "group_input")
             clear_input(form, "age_input")
-            clear_select(form, "race_input")
-            clear_select(form, "hacker_defence_packet")
-            clear_input(form, "bank_balance")
+            clear_select(form, "race_select")
+            clear_select(form, "hacker_defence_packet_select")
+            clear_input(form, "bank_balance_input")
+            clear_select(form, "can_publish_news_select")
 
-            var old_custom_values = document.getElementById("custom_values")
-            if (old_custom_values != null)
-                form.removeChild(old_custom_values)
+            let old_attribute_list = document.getElementById("custom_attribute_list")
+            if (old_attribute_list != null)
+                form.removeChild(old_attribute_list)
 
-            var custom_values = document.createElement("div");
-            custom_values.id = "custom_values"
-            form.append(custom_values)
+            let attribute_list = document.createElement("div");
+            attribute_list.id = "custom_attribute_list"
+            form.append(attribute_list)
 
-            custom_value_id_counter = 0
+            custom_attribute_id_counter = 0
         }
         function clear_input(from, name) {
             var element = from.querySelector("#" + name)
@@ -185,112 +227,166 @@
                 element.selectedIndex = 0
             }
         }
+        function clear_selected_user() {
+            let users_list = document.getElementById("users_list")
+            users_list.selectedIndex = -1
+        }
         function load_form(entry) {
-            console.log(all_users[entry])
+            if (unsaved_changes) {
+                // Loading user without saveing changes. Ok to discard changes and load the user
+                if (!confirm("Zmieniasz gracza nie zapisując bierzących zmian. Ok, aby porzucić zmiany i wczytać gracza")) {
+                    clear_selected_user()
+                    return
+                }
+            }
+
+            clear_form()
+
+            const user = saved_users[entry]
+            document.getElementById("username_input").value = user["username"]
+            document.getElementById("password_input").value = user["password"]
+            document.getElementById("name_input").value = user["name"]
+            document.getElementById("surname_input").value = user["surname"]
+            document.getElementById("group_input").value = user["group"]
+            document.getElementById("age_input").value = user["age"]
+            document.getElementById("race_select").selectedIndex = user["race"]
+            document.getElementById("hacker_defence_packet_select").selectedIndex = user["hacker_defence_packet"]
+            document.getElementById("bank_balance_input").value = user["bank_balance"]
+            document.getElementById("can_publish_news_select").selectedIndex = user["can_publish_news"]
+
+            const custom_attributes = user["custom_attributes"]
+            if (custom_attributes === undefined)
+                return
+            
+            for (const [key, value] of Object.entries(custom_attributes)) {
+                add_custom_attribute()
+                document.getElementById("custom_attribute_name_" + (custom_attribute_id_counter - 1)).value = key
+                document.getElementById("custom_attribute_content_" + (custom_attribute_id_counter - 1)).value = value
+            }
         }
         function validate_form() {
-            var username_input = document.getElementById("username_input")
-            var username = username_input.value
+            let username_input = document.getElementById("username_input")
+            let username = username_input.value
 
             if (username.length === 0) {
                 username_input.style.backgroundColor = "Red"
+                // Username cannot be empty
                 alert("Pole nazwa użytkownika nie może być puste!")
                 return null
             }
+            username_input.style.backgroundColor = "White"
 
             if (onlyLetters(username) == false) {
                 username_input.style.backgroundColor = "Red"
+                // Username can only contain small and big letters
                 alert("Nazwa użytkownika może zawierać tylko małe i duże litery!")
                 return null
             }
 
-            var password_input = document.getElementById("password_input")
-            var password = password_input.value
+            let password_input = document.getElementById("password_input")
+            let password = password_input.value
 
             if (password.length === 0) {
-                password.style.backgroundColor = "Red"
+                password_input.style.backgroundColor = "Red"
+                // Password cannot be empty
                 alert("Pole hasło nie może być puste!")
                 return null
             }
+            password_input.style.backgroundColor = "White"
 
             if (hasWhiteSpaces(password) == true) {
                 password_input.style.backgroundColor = "Red"
+                // Password cannot contain whie spaces
                 alert("Hasło nie może zawierać białych znaków (spacje, tabulacje itp)")
                 return null
             }
+            password_input.style.backgroundColor = "White"
             
-            var name_input = document.getElementById("name_input")
-            var name = name_input.value
+            let name_input = document.getElementById("name_input")
+            let name = name_input.value
 
             if (name.length === 0) {
-                name.style.backgroundColor = "Red"
+                name_input.style.backgroundColor = "Red"
+                // Name cannot be empty
                 alert("Pole imie nie może być puste!")
                 return null
             }
 
             if (onlyLetters(name) == false) {
                 name_input.style.backgroundColor = "Red"
+                // Name can only contain small and big letters
                 alert("Imie gracza może zawierać tylko małe i duże litery!")
                 return null
             }
+            name_input.style.backgroundColor = "White"
 
-            var surname_input = document.getElementById("surname_input")
-            var surname = surname_input.value
+            let surname_input = document.getElementById("surname_input")
+            let surname = surname_input.value
 
             if (surname.length === 0) {
-                surname.style.backgroundColor = "Red"
+                surname_input.style.backgroundColor = "Red"
+                // Surname cannot be empty
                 alert("Pole nazwisko nie może być puste!")
                 return null
             }
 
             if (onlyLetters(surname) == false) {
                 surname_input.style.backgroundColor = "Red"
+                // Surname can only contain small and big letters
                 alert("Nazwisko gracza może zawierać tylko małe i duże litery!")
                 return null
             }
+            surname_input.style.backgroundColor = "White"
 
-            var group_input = document.getElementById("group_input")
-            var group = group_input.value
+            let group_input = document.getElementById("group_input")
+            let group = group_input.value
             
             if (group.length === 0) {
-                group.style.backgroundColor = "Red"
+                group_input.style.backgroundColor = "Red"
+                // Company/gang/colective cannot be empty
                 alert("Pole firma/gang/kolektyw nie może być puste!")
                 return null
             }
+            group_input.style.backgroundColor = "White"
 
-            var age_input = document.getElementById("age_input")
-            var age = age_input.value
+            let age_input = document.getElementById("age_input")
+            let age = age_input.value
 
             if (age.length === 0) {
                 age_input.style.backgroundColor = "Red"
+                // Age cannot be empty
                 alert("Pole wiek nie może być puste!")
                 return null
             }
 
-            var age_int = parseInt(age)
+            let age_int = parseInt(age)
             if (isNaN(age_int)) {
                 age_input.style.backgroundColor = "Red"
+                // Age must be a number
                 alert("Wartość w polu wiek nie jest liczbą!")
                 return null
             }
 
             if (age_int < 0) {
                 age_input.style.backgroundColor = "Red"
+                // Age cannot be negative
                 alert("Wartość w polu wiek jest mniejsza od zera!")
                 return null
             }
+            age_input.style.backgroundColor = "White"
 
-            var race_input = document.getElementById("race_input")
-            var race = race_input.selectedIndex
+            let race_select = document.getElementById("race_select")
+            let race = race_select.selectedIndex
 
-            var hacker_defence_packet_input = document.getElementById("hacker_defence_packet")
-            var hacker_defence_packet = hacker_defence_packet_input.selectedIndex
+            let hacker_defence_packet_select = document.getElementById("hacker_defence_packet_select")
+            let hacker_defence_packet = hacker_defence_packet_select.selectedIndex
 
-            var bank_balance_input = document.getElementById("bank_balance")
-            var bank_balance = bank_balance_input.value
+            let bank_balance_input = document.getElementById("bank_balance_input")
+            let bank_balance = bank_balance_input.value
 
             if (age.length === 0) {
                 bank_balance_input.style.backgroundColor = "Red"
+                // Bank balance cannot be empty
                 alert("Pole stan konta bankowego nie może być puste!")
                 return null
             }
@@ -298,39 +394,57 @@
             bank_balance_int = parseInt(bank_balance)
             if (isNaN(bank_balance_int)) {
                 bank_balance_input.style.backgroundColor = "Red"
+                // Bank balance must be a number
                 alert("Wartość w polu stan konta bankowego nie jest liczbą!")
                 return null
             }
 
             if (bank_balance_int < 0) {
                 bank_balance_input.style.backgroundColor = "Red"
+                // Bank balance cannot be negative
                 alert("Wartość w polu stan konta bankowego jest mniejsza od zera!")
                 return null
             }
+            bank_balance_input.style.backgroundColor = "White"
 
-            let custom_values = {}
-            for (let i = 0; i < custom_value_id_counter; ++i) {
-                let custom_value_name = document.getElementById("custom_value_name_" + i)
-                let custom_value_content = document.getElementById("custom_value_content_" + i)
+            let can_publish_news_select = document.getElementById("can_publish_news_select")
+            let can_publish_news = can_publish_news_select.selectedIndex
 
-                if (custom_value_name === null || custom_value_content === null) {
+            let custom_attributes = {}
+            for (let i = 0; i < custom_attribute_id_counter; ++i) {
+                let custom_attribute_name = document.getElementById("custom_attribute_name_" + i)
+                let custom_attribute_content = document.getElementById("custom_attribute_content_" + i)
+
+                if (custom_attribute_name === null || custom_attribute_content === null) {
                     continue
                 }
-
-                if (custom_value_name.value.length === 0 || custom_value_content.value.lenth === 0) {
-                    custom_value_name.style.backgroundColor = "Yellow"
+                
+                if (custom_attribute_name.value.length === 0) {
+                    custom_attribute_name.style.backgroundColor = "Red"
+                    // Custom attribute name cannot be empty. Remove or fill the field
                     alert("Wartość w polu dodatkowym polu jest pusta. Usuń lub wypełnij pole!")
                     return null
                 }
-                
-                if (custom_value_name.value in custom_values)
-                {
-                    custom_value_name.style.backgroundColor = "Yellow"
-                    alert("Wartość w nazwie pola dodatkowego została powtórzona!")
+                custom_attribute_name.style.backgroundColor = "White"
+
+                if (custom_attribute_content.value.length === 0) {
+                    custom_attribute_content.style.backgroundColor = "Red"
+                    // Custom attribute value cannot be empty. Remove or fill the field
+                    alert("Wartość w polu dodatkowym polu jest pusta. Usuń lub wypełnij pole!")
                     return null
                 }
+                custom_attribute_content.style.backgroundColor = "White"
+                
+                if (custom_attribute_name.value in custom_attributes)
+                {
+                    custom_attribute_name.style.backgroundColor = "Red"
+                    // The attribute name is already used
+                    alert("Wartość w nazwie pola dodatkowego jest już w użyciu!")
+                    return null
+                }
+                custom_attribute_name.style.backgroundColor = "White"
 
-                custom_values[custom_value_name.value] = custom_value_content.value;
+                custom_attributes[custom_attribute_name.value] = custom_attribute_content.value;
             } 
 
             return { "username": username,
@@ -342,7 +456,8 @@
                      "race": race, 
                      "hacker_defence_packet": hacker_defence_packet, 
                      "bank_balance": bank_balance,
-                     "custom_values": custom_values }
+                     "can_publish_news": can_publish_news,
+                     "custom_attributes": custom_attributes }
         }
         function onlyLetters(value) {
             return /^[A-Za-z]+$/.test(value);
@@ -350,8 +465,8 @@
         function hasWhiteSpaces(value) {
             return /\s/.test(value)
         }
-        function mark_form_edited() {
-            form_edited = true
+        function mark_form_unsaved() {
+            unsaved_changes = true
         }
         //RUN
         document.addEventListener("DOMContentLoaded", () => {
@@ -367,12 +482,12 @@
         <div id="right_panel">
             <div id="right_panel_options">
                 <button onclick="save_user()">Zapisz gracza</button>
-                <button>Usuń gracza</button>
-                <button>Eksportuj do pliku</button>
+                <button onclick="remove_user()">Usuń gracza</button>
+                <button onclick="export_to_file()"">Eksportuj do pliku</button>
                 <button onclick="import_button_clicked()">Importuj z pliku</button>
                 <input id="import_file_input" type="file" accept=".json,application/json" onchange="import_from_file(this)" style="display: none;">
             </div>
-            <div id="user_data_form" onchange="mark_form_edited()">
+            <div id="user_data_form" onchange="mark_form_unsaved()">
                 <label>Nazwa użytkownika</label>
                 <input id="username_input">
                 <label>Hasło</label>
@@ -386,7 +501,7 @@
                 <label>Wiek</label>
                 <input type="number" min="0" step="1" id="age_input">
                 <label>Rasa</label>
-                <select id="race_input">
+                <select id="race_select">
                     <option>Człowiek</option>
                     <option>Elf</option>
                     <option>Ork</option>
@@ -394,16 +509,21 @@
                     <option>Krasnolud</option>
                 </select>
                 <label>Pakiet ochrony hakerskiej</label>
-                <select id="hacker_defence_packet">
+                <select id="hacker_defence_packet_select">
                     <option>Podstawowy</option>
                     <option>Standard</option>
                     <option>Rozbudowany</option>
                     <option>Profesjonalny</option>
                 </select>
                 <label>Stan konta bankowego</label>
-                <input type="number" min="0" step="1" id="bank_balance">
+                <input type="number" min="0" step="1" id="bank_balance_input">
+                <label>Może publikować newsy</label>
+                <select id="can_publish_news_select">
+                    <option>Nie</option>
+                    <option>Tak</option>
+                </select>
             </div>
-            <button onclick="add_user_custom_value()">Dodaj nowe pole</button>
+            <button onclick="add_custom_attribute()">Dodaj nowy atrybut</button>
         </div>
     </body>
 </html>
