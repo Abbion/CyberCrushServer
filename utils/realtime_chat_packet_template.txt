@@ -1,0 +1,2 @@
+{ "type": "init", "token": "token", "chat_id": id }
+{ "type": "msg", "token": "token", "message": "text" }

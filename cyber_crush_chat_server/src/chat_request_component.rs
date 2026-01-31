@@ -80,15 +80,18 @@ pub struct GetChatMetaDataRequest {
     chat_id: i32,
 }
 
+//TODO rename to Metadata
 #[derive(Debug, Serialize)]
 pub struct DirectChatMetaData {
     username_a: String,
     username_b: String,
 }
 
+//TODO rename to Metadata
 #[derive(Debug, Serialize)]
 pub struct GroupChatMetaData {
     admin_username: String,
+    title: String,
     members: Vec<String>,
 }
 
@@ -378,6 +381,27 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
                 }
             };
 
+            let title_query = sqlx::query_scalar::<_, String>(
+            r#"
+                SELECT title
+                FROM group_chats
+                WHERE chat_id = $1
+            "#)
+            .bind(payload.chat_id)
+            .fetch_optional(&state.db_pool)
+            .await;
+
+            let title = match title_query {
+                Ok(Some(title)) => title,
+                Ok(None) => {
+                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Chat title not found".into()), metadata:  None });
+                },
+                Err(error) => {
+                    eprintln!("Error: Getting group chat title failed for chat id: {}, error: {}", payload.chat_id, error);
+                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 5".into()), metadata:  None });
+                }
+            };
+
             let members_query = sqlx::query_scalar::<_, String>(
             r#"
                 SELECT u.username
@@ -391,12 +415,12 @@ pub async fn get_chat_metadata(State(state): State<Arc<ServerState>>, Json(paylo
             
             match members_query {
                 Ok(members) => {
-                    let group_chat_meta_data = ChatMetaData::Group(GroupChatMetaData{ admin_username, members });
-                    GetChatMetaDataResponse{ response_status: ResponseStatus::success(), metadata: Some(group_chat_meta_data) }
+                    let group_chat_metadata = ChatMetaData::Group(GroupChatMetaData{ admin_username, title, members });
+                    GetChatMetaDataResponse{ response_status: ResponseStatus::success(), metadata: Some(group_chat_metadata) }
                 },
                 Err(error) => {
                     eprintln!("Error: Getting group chat members failed for chat id: {}, error: {}", payload.chat_id, error);
-                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 5".into()), metadata:  None });
+                    return Json(GetChatMetaDataResponse{ response_status: ResponseStatus::fail("Internal server error: 6".into()), metadata:  None });
                 }
             }
         }
