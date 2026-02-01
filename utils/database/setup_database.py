@@ -85,6 +85,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS chat_messages (
                 id SERIAL PRIMARY KEY,
                 chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+                in_chat_index INTEGER NOT NULL,
                 sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 content TEXT NOT NULL,
                 time_stamp TIMESTAMP DEFAULT NOW()
@@ -107,6 +108,7 @@ def init_db():
         direct_chats_table_query = sql.SQL("""
             CREATE TABLE IF NOT EXISTS direct_chats (
                 chat_id INTEGER PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
+                next_message_index INT NOT NULL DEFAULT 0,
                 last_message TEXT,
                 last_time_stamp TIMESTAMP
             );
@@ -118,6 +120,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS group_chats (
                 chat_id INTEGER PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
                 admin_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                next_message_index INT NOT NULL DEFAULT 0,
                 title VARCHAR(64) NOT NULL,
                 last_message TEXT,
                 last_time_stamp TIMESTAMP

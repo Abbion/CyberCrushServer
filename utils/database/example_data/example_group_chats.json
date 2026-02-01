@@ -22,7 +22,7 @@
 	"user_1" : "Amadeus",
 	"user_2" : "Karma",
 	"user_3" : "Victor",
-
+	
 	"messages" : [
 		{ "sender" : 1, "content" : "0", "time_stamp" : "2025-12-04 13:03:02" },
 		{ "sender" : 2, "content" : "1", "time_stamp" : "2025-12-04 13:03:04" },

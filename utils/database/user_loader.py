@@ -159,10 +159,10 @@ def insert_chat(db_cursor):
     db_cursor.execute(insert_chat_sql)
     return db_cursor.fetchone()[0]
 
-def insert_chat_message(db_cursor, chat_id, sender_id, content, time_stamp):
-    insert_message_sql = """INSERT INTO chat_messages (chat_id, sender_id, content, time_stamp)
-                                VALUES (%s, %s, %s, %s);"""
-    insert_message_params = (chat_id, sender_id, content, time_stamp)
+def insert_chat_message(db_cursor, chat_id, in_chat_index, sender_id, content, time_stamp):
+    insert_message_sql = """INSERT INTO chat_messages (chat_id, in_chat_index, sender_id, content, time_stamp)
+                                VALUES (%s, %s, %s, %s, %s);"""
+    insert_message_params = (chat_id, in_chat_index, sender_id, content, time_stamp)
     db_cursor.execute(insert_message_sql, insert_message_params)
 
 def assign_user_chat(db_cursor, chat_id, user_id):
@@ -189,8 +189,8 @@ def load_direct_chat_data(direct_chat_data_path, username_to_id_map, db_connecti
     try:
         db_cursor = db_connection.cursor()
         
-        insert_direct_chat_sql = """INSERT INTO direct_chats (chat_id, last_message, last_time_stamp)
-                                        VALUES (%s, %s, %s);"""
+        insert_direct_chat_sql = """INSERT INTO direct_chats (chat_id, next_message_index, last_message, last_time_stamp)
+                                        VALUES (%s, %s, %s, %s);"""
        
         for direct_chat in direct_chats:
             user_a = direct_chat["user_a"]
@@ -203,7 +203,7 @@ def load_direct_chat_data(direct_chat_data_path, username_to_id_map, db_connecti
             assign_user_chat(db_cursor, chat_id, user_a_id)
             assign_user_chat(db_cursor, chat_id, user_b_id)
 
-            for message in messages:
+            for index, message in enumerate(messages):
                 sender = message["sender"]
                 if sender == "a":
                     sender = user_a_id
@@ -216,13 +216,13 @@ def load_direct_chat_data(direct_chat_data_path, username_to_id_map, db_connecti
                 content = message["content"]
                 time_stamp = message["time_stamp"]
 
-                insert_chat_message(db_cursor, chat_id, sender, content, time_stamp)
+                insert_chat_message(db_cursor, chat_id, index, sender, content, time_stamp)
 
             last_message_info = get_last_message_and_time_stamp(db_cursor, chat_id)
 
             if last_message_info:
                 last_message, last_time_stamp = last_message_info
-                insert_direct_chat_params = (chat_id, last_message, last_time_stamp)
+                insert_direct_chat_params = (chat_id, len(messages), last_message, last_time_stamp)
                 db_cursor.execute(insert_direct_chat_sql, insert_direct_chat_params)
 
  
@@ -241,8 +241,8 @@ def load_group_chat_data(group_chat_data_path, username_to_id_map, db_connection
     try:
         db_cursor = db_connection.cursor()
 
-        insert_group_chat_sql = """INSERT INTO group_chats (chat_id, admin_id, title, last_message, last_time_stamp)
-                                        VALUES (%s, %s, %s, %s, %s);"""
+        insert_group_chat_sql = """INSERT INTO group_chats (chat_id, admin_id, next_message_index, title, last_message, last_time_stamp)
+                                        VALUES (%s, %s, %s, %s, %s, %s);"""
 
         for group_chat in group_chats:
             admin = group_chat["admin"]
@@ -262,19 +262,19 @@ def load_group_chat_data(group_chat_data_path, username_to_id_map, db_connection
                 assign_user_chat(db_cursor, chat_id, member_id)
             messages = group_chat["messages"]
 
-            for message in messages:
+            for index, message in enumerate(messages):
                 sender_tag = message["sender"]
                 content = message["content"]
                 time_stamp = message["time_stamp"]
                 sender_id = members[sender_tag]
                 
-                insert_chat_message(db_cursor, chat_id, sender_id, content, time_stamp)
+                insert_chat_message(db_cursor, chat_id, index, sender_id, content, time_stamp)
             
             last_message_info = get_last_message_and_time_stamp(db_cursor, chat_id)
 
             if last_message_info:
                 last_message, last_time_stamp = last_message_info
-                insert_group_chat_params = (chat_id, admin_id, title, last_message, last_time_stamp)
+                insert_group_chat_params = (chat_id, admin_id, len(messages), title, last_message, last_time_stamp)
                 db_cursor.execute(insert_group_chat_sql, insert_group_chat_params)
              
 
