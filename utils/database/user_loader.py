@@ -260,7 +260,6 @@ def load_group_chat_data(group_chat_data_path, username_to_id_map, db_connection
                 member_id = username_to_id_map[member_username]
                 members[i] = member_id
                 assign_user_chat(db_cursor, chat_id, member_id)
-
             messages = group_chat["messages"]
 
             for message in messages:

@@ -39,7 +39,7 @@ struct ConnectionData {
 enum ChatResponse {
     Info { text: String },
     Error { text: String },
-    ChatMessage { chat_id: i32, message: String, time_stamp: String },
+    ChatMessage { chat_id: i32, sender: String, message: String, time_stamp: String },
 }
 
 pub async fn web_socket_handler(ws: WebSocketUpgrade, State(state): State<Arc<ServerState>>) -> impl IntoResponse {
@@ -59,7 +59,7 @@ pub async fn handle_socket(web_socket: WebSocket, state: Arc<ServerState>) {
     state.token_to_chat_id.insert(connection_data.token.clone(), connection_data.chat_id);
     state.chat_connections.entry(connection_data.chat_id).or_default().push((connection_data.user_id, sending_channel.clone()));
 
-    let connection_success_response = ChatResponse::Info{ text: "User connected to chat!".into() };
+    let connection_success_response = ChatResponse::Info{ text: "user connection succeeded".into() };
     ws_send_chat_response(&mut sender, &connection_success_response).await;
     
     //Thread that sends messages from the channel to the websocket client
@@ -85,7 +85,7 @@ pub async fn handle_socket(web_socket: WebSocket, state: Arc<ServerState>) {
 
         match client_message {
             Ok(ChatClientMessage::Init{ .. }) => {
-                let info_response = ChatResponse::Info{ text: "Connection already initialized".into() };
+                let info_response = ChatResponse::Info{ text: "connection already initialized".into() };
                 channel_send_chat_response(&sending_channel, &info_response);
             },
             Ok(ChatClientMessage::Msg{ token, message }) => {
@@ -102,8 +102,34 @@ pub async fn handle_socket(web_socket: WebSocket, state: Arc<ServerState>) {
                     continue;
                 }
 
+                let sender_username_query = sqlx::query_scalar::<_, String>(
+                r#"
+                    SELECT username
+                    FROM users
+                    WHERE id = $1
+                "#)
+                .bind(connection_data.user_id)
+                .fetch_optional(&state.db_pool)
+                .await;
+
+                let username = match sender_username_query {
+                    Ok(Some(username)) => username,
+                    Ok(None) => {
+                        let error_response = ChatResponse::Error{ text: "sender username not found".to_string() };
+                        channel_send_chat_response(&sending_channel, &error_response);
+                        continue
+                    },
+                    Err(error) => {
+                        let error_response = ChatResponse::Error{ text: "An error has occured while sending message through chat. Internal server error!".to_string() };
+                        channel_send_chat_response(&sending_channel, &error_response);
+                        eprintln!("Getting username for user id {} failed. Error: {}", connection_data.user_id, error);
+                        continue
+                    }
+                };
+
                 let chat_response = ChatResponse::ChatMessage {
                     chat_id: connection_data.chat_id,
+                    sender: username,
                     message: message.clone(),
                     time_stamp: time_stamp.to_string(),
                 };
