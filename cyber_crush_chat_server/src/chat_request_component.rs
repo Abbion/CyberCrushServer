@@ -44,12 +44,13 @@ pub struct GetUserChatsResponse {
 pub struct GetChatHistoryRequest {
     token: String,
     chat_id: i32,
-    history_time_stamp: Option<chrono::NaiveDateTime>,
+    history_last_index: Option<i32>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct ChatMessage {
     sender: String,
+    in_chat_index: i32,
     message: String,
     time_stamp: chrono::NaiveDateTime,
 }
@@ -253,29 +254,29 @@ pub async fn get_chat_history(State(state): State<Arc<ServerState>>, Json(payloa
         return Json(GetChatHistoryResponse::fail("Not a chat member".into()));
     }
 
-    let message_query = match payload.history_time_stamp {
-        Some(time_stamp) => {
+    let message_query = match payload.history_last_index {
+        Some(last_index) => {
             sqlx::query_as::<_, ChatMessage>(
             r#"
-                SELECT u.username AS sender, m.content AS message, m.time_stamp
+                SELECT u.username AS sender, m.in_chat_index, m.content AS message, m.time_stamp
                 FROM chat_messages m
                 JOIN users u ON u.id = m.sender_id
-                WHERE m.chat_id = $1 AND m.time_stamp < $2
-                ORDER BY m.time_stamp DESC
+                WHERE m.chat_id = $1 AND m.in_chat_index < $2
+                ORDER BY m.in_chat_index DESC
                 LIMIT 50
             "#)
             .bind(payload.chat_id)
-            .bind(time_stamp)
+            .bind(last_index)
             .fetch_all(&state.db_pool)
         },
         None => {
             sqlx::query_as::<_, ChatMessage>(
             r#"
-                SELECT u.username AS sender, m.content AS message, m.time_stamp
+                SELECT u.username AS sender, m.in_chat_index, m.content AS message, m.time_stamp
                 FROM chat_messages m
                 JOIN users u ON u.id = m.sender_id
                 WHERE m.chat_id = $1
-                ORDER BY m.time_stamp DESC
+                ORDER BY m.in_chat_index DESC
                 LIMIT 50
             "#)
             .bind(payload.chat_id)

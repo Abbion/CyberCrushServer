@@ -39,7 +39,7 @@ struct ConnectionData {
 enum ChatResponse {
     Info { text: String },
     Error { text: String },
-    ChatMessage { chat_id: i32, sender: String, message: String, time_stamp: String },
+    ChatMessage { chat_id: i32, in_chat_index: i32, sender: String, message: String, time_stamp: String },
 }
 
 pub async fn web_socket_handler(ws: WebSocketUpgrade, State(state): State<Arc<ServerState>>) -> impl IntoResponse {
@@ -96,11 +96,15 @@ pub async fn handle_socket(web_socket: WebSocket, state: Arc<ServerState>) {
 
                 let time_stamp = chrono::Utc::now().naive_utc();
 
-                if let Err(error) = update_database(&connection_data, &message, &time_stamp, &state.db_pool).await {
-                    let error_response = ChatResponse::Error{ text: error };
-                    channel_send_chat_response(&sending_channel, &error_response);
-                    continue;
-                }
+                let message_index = match update_database(&connection_data, &message, &time_stamp, &state.db_pool).await {
+                    Ok(index) => index,
+                    Err(error) => 
+                    {
+                        let error_response = ChatResponse::Error{ text: error };
+                        channel_send_chat_response(&sending_channel, &error_response);
+                        continue;
+                    }
+                };
 
                 let sender_username_query = sqlx::query_scalar::<_, String>(
                 r#"
@@ -129,6 +133,7 @@ pub async fn handle_socket(web_socket: WebSocket, state: Arc<ServerState>) {
 
                 let chat_response = ChatResponse::ChatMessage {
                     chat_id: connection_data.chat_id,
+                    in_chat_index: message_index,
                     sender: username,
                     message: message.clone(),
                     time_stamp: time_stamp.to_string(),
@@ -244,7 +249,7 @@ async fn validate_user_and_chat(state: &ServerState, token: &String, chat_id: i3
     Ok((user_id, chat_type))
 }
 
-async fn update_database(connection_data: &ConnectionData, message: &String, time_stamp: &NaiveDateTime, db_pool :&PgPool) -> Result<(), String> {
+async fn update_database(connection_data: &ConnectionData, message: &String, time_stamp: &NaiveDateTime, db_pool :&PgPool) -> Result<i32, String> {
     let mut transaction = match db_pool.begin().await {
         Ok(tx) => tx,
         Err(error) => {
@@ -253,12 +258,22 @@ async fn update_database(connection_data: &ConnectionData, message: &String, tim
         }
     };
 
+    //TODO create a transaction(maybe)?
+
+    let message_index = match get_next_message_index(connection_data, db_pool).await {
+        Some(index) => index,
+        None => {
+            return Err("Failed to send message. Internal server error: 2".into());
+        }
+    };
+
     let insert_message_query = sqlx::query(
     r#"
-        INSERT INTO chat_messages (chat_id, sender_id, content, time_stamp)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO chat_messages (chat_id, in_chat_index, sender_id, content, time_stamp)
+        VALUES ($1, $2, $3, $4, $5)
     "#)
     .bind(connection_data.chat_id)
+    .bind(message_index)
     .bind(connection_data.user_id)
     .bind(message.clone())
     .bind(time_stamp.clone())
@@ -268,7 +283,7 @@ async fn update_database(connection_data: &ConnectionData, message: &String, tim
     if let Err(error) = insert_message_query {
         eprintln!("Error: Realtime chat component failed to insert message for user id: {} and chat id: {}, error: {}", connection_data.user_id, connection_data.chat_id, error);
         let _ = transaction.rollback().await;
-        return Err("Failed to send message. Internal server error: 2".into());
+        return Err("Failed to send message. Internal server error: 3".into());
     }
                     
     let chat_to_update = match connection_data.chat_type {
@@ -295,15 +310,49 @@ async fn update_database(connection_data: &ConnectionData, message: &String, tim
     if let Err(error) = update_last_metadata_query {
         eprintln!("Error: Realtime chat component failed to update last metadata for user id: {} and chat id: {}, error: {}", connection_data.user_id, connection_data.chat_id, error);
         let _ = transaction.rollback().await;
-        return Err("Failed to send message. Internal server error: 3".into());
+        return Err("Failed to send message. Internal server error: 4".into());
     }
 
     if let Err(error) = transaction.commit().await {
         eprintln!("Error: Realtime chat component failed to commit transaction for user id: {} and chat id: {}, error: {}", connection_data.user_id, connection_data.chat_id, error);
-        return Err("Failed to send message. Internal server error: 4".into());
+        return Err("Failed to send message. Internal server error: 5".into());
     }
 
-    Ok(())
+    Ok(message_index)
+}
+
+async fn get_next_message_index(connection_data: &ConnectionData, db_pool :&PgPool) -> Option<i32> {
+    let next_message_index_query = sqlx::query_scalar::<_, i32>(
+    r#"
+        WITH direct_chat AS (
+            UPDATE direct_chats
+            SET next_message_index = next_message_index + 1
+            WHERE chat_id = $1
+            RETURNING next_message_index - 1 AS allocated_index
+        ),
+        group_chat AS (
+            UPDATE group_chats
+            SET next_message_index = next_message_index + 1
+            WHERE chat_id = $1
+            RETURNING next_message_index - 1 AS allocated_index
+        )
+        SELECT allocated_index FROM direct_chat
+        UNION ALL
+        SELECT allocated_index FROM group_chat;
+    "#)
+    .bind(connection_data.chat_id)
+    .fetch_optional(db_pool)
+    .await;
+
+    let next_message_index = match next_message_index_query {
+        Ok(index) => index,
+        Err(error) => {
+            eprintln!("Error: Realtime chat failed to find next message id for chat id: {}, error: {}", connection_data.chat_id, error);
+            None
+        }
+    };
+
+    next_message_index
 }
 
 async fn ws_send_chat_response(sender: &mut WsSender, chat_response: &ChatResponse) {
