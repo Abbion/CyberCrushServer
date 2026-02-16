@@ -64,7 +64,7 @@ async fn main() {
     println!("Data server running at: {}", socket_addr);
 
     let app = Router::new()
-        .route("/", get(hello))
+        .route("/hello", get(hello))
         .route("/get_all_usernames", get(get_all_usernames))
         .route("/get_user_data", post(get_user_data))
         .with_state(server_state.clone());

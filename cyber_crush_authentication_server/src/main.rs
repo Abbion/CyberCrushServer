@@ -44,7 +44,7 @@ async fn main() {
     println!("Authentication server running at: {}", socket_addr);
 
     let app = Router::new()
-        .route("/", get(hello))
+        .route("/hello", get(hello))
         .route("/login", post(login))
         .route("/validate_token", post(validate_token))
         .with_state(server_state.clone());
