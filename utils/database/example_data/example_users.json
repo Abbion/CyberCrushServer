@@ -4,9 +4,9 @@
         "password" : "Hexe4?",
         "extra_data" : {
             "job" : "wizard",
-	    "race" : "orc",
-	    "sex" : "male",
-	    "gang" : "post frost"
+            "race" : "orc",
+            "sex" : "male",
+            "gang" : "post frost"
         }
     },
     {
@@ -14,10 +14,10 @@
         "password" : "R@tM@n1",
         "extra_data" : {
             "job" : "DJ",
-	    "race" : "elf",
-	    "gang" : "shadow rest",
-	    "addict" : true,
-	    "anger issues" : true
+            "race" : "elf",
+            "gang" : "shadow rest",
+            "addict" : true,
+            "anger issues" : true
         }
     },
     {
@@ -25,9 +25,119 @@
         "password" : "LexSp3ll!",
         "extra_data" : {
             "job" : "dancer",
-	    "race" : "human",
-	    "blood curse" : true,
-	    "age" : 68
+            "race" : "human",
+            "blood curse" : true,
+            "age" : 68
+        }
+    },
+    {
+        "username" : "Ren",
+        "password" : "cheapchain70",
+        "extra_data" : {
+            "job" : "medic",
+            "race" : "gnome",
+            "blod age" : 113
+        }
+    },
+    {
+        "username" : "Chrome",
+        "password" : "keenrule92",
+        "extra_data" : {
+            "range" : "low",
+            "has brain" : true
+        }
+    },
+    {
+        "username" : "Solveig",
+        "password" : "darkpuppy92",
+        "extra_data" : {
+            "gang" : "furry gang",
+            "has dog" : true,
+            "race" : "dino"
+        }
+    },
+    {
+        "username" : "Draco",
+        "password" : "goodmetal97",
+        "extra_data" : {
+            "sex" : "all",
+            "race" : "glob"
+        }
+    },
+    {
+        "username" : "Jelani",
+        "password" : "quietlight75",
+        "extra_data" : {
+            "job" : "bouncer",
+            "weight" : "190 kg"
+        }
+    },
+    {
+        "username" : "Vex",
+        "password" : "majorjade5!",
+        "extra_data" : {
+            "favorite food" : "pierogi",
+            "age" : 67
+        }
+    },
+    {
+        "username" : "Eljah",
+        "password" : "newbell65",
+        "extra_data" : {
+            "addict" : true,
+            "blood type" : "ft-12"
+        }
+    },
+    {
+        "username" : "Isabel",
+        "password" : "tamesnail",
+        "extra_data" : {
+            "job" : "taxi driver",
+            "has weapon" : true,
+            "implants" : 12
+        }
+    },
+    {
+        "username" : "Idun",
+        "password" : "thickjewel",
+        "extra_data" : {
+            "job" : "spider eater",
+            "mage type" : "arachnid bender"
+        }
+    },
+    {
+        "username" : "Shota",
+        "password" : "openrock46",
+        "extra_data" : {
+            "job" : "caravan dweller",
+            "favorite movie" : "Shrek"
+        }
+    },
+    {
+        "username" : "Poe",
+        "password" : "longmonkey60",
+        "extra_data" : {
+            "is long" : false,
+            "height" : "12 cm",
+            "race" : "pixie"
+        }
+    },
+    {
+        "username" : "Chima",
+        "password" : "glumlynx30",
+        "extra_data" : {
+            "favorite meme" : "Shiba-ko",
+            "age" : 111,
+            "gang" : "Egg gang"
+        }
+    },
+    {
+        "username" : "Maliniak",
+        "password" : "Mrrrrr",
+        "extra_data" : {
+            "type" : "black",
+            "stinky poop" : true,
+            "sleepy" : true
         }
     }
 ]

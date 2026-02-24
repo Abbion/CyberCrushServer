@@ -1,24 +1,101 @@
 [
     {
-	"username" : "Amadeus",
-	"current_funds" : 1500,
-	"transactions" : [
-	    { "receiver" : "Karma", "message" : "pc parts", "amount" : 750, "time_stamp" : "2025-09-30 17:42:12" },
-	    { "receiver" : "Victor", "message" : "Bills", "amount" : 241, "time_stamp" : "2025-10-01 6:32:04" }
-    	]
+        "username" : "Amadeus",
+        "current_funds" : 1500,
+        "transactions" : [
+            { "receiver" : "Karma", "message" : "pc parts", "amount" : 750, "time_stamp" : "2025-09-30 17:42:12" },
+            { "receiver" : "Victor", "message" : "Bills", "amount" : 241, "time_stamp" : "2025-10-01 6:32:04" }
+        ]
     },
     {
-	"username" : "Victor",
-	"current_funds" : 2750,
-	"transactions" : [
-	    { "receiver" : "Amadeus", "message" : "dj-set fix", "amount": 300, "time_stamp": "2025-10-03 12:34:08" }
-	]
+        "username" : "Victor",
+        "current_funds" : 2750,
+        "transactions" : [
+            { "receiver" : "Amadeus", "message" : "dj-set fix", "amount": 300, "time_stamp": "2025-10-03 12:34:08" }
+        ]
     },
     {
-	"username" : "Karma",
-	"current_funds" : 420,
-	"transactions" : [
-	    { "receiver" : "Amadeus", "message" : "cracked software", "amount": 250, "time_stamp" : "2025-10-04 13:17:04" }	
-	]
+        "username" : "Karma",
+        "current_funds" : 420,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Ren",
+        "current_funds" : 2310,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Chrome",
+        "current_funds" : 2460,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Solveig",
+        "current_funds" : 2475,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Draco",
+        "current_funds" : 2210,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Jalani",
+        "current_funds" : 1870,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Vex",
+        "current_funds" : 2240,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Eljah",
+        "current_funds" : 1381,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Isabel",
+        "current_funds" : 1217,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Idun",
+        "current_funds" : 1210,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Shota",
+        "current_funds" : 2345,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Poe",
+        "current_funds" : 1455,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Cima",
+        "current_funds" : 1190,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Maliniak",
+        "current_funds" : 999,
+        "transactions" : [
+        ]
     }
 ]
