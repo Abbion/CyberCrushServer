@@ -71,19 +71,21 @@ def load_user_data(user_data_path, db_connection):
     try:
         db_cursor = db_connection.cursor()
 
-        insert_user_sql = """INSERT INTO users (username, password, user_token, personal_number, extra_data)
-                            VALUES (%s, %s, %s, %s, %s) RETURNING id;"""
+        insert_user_sql = """INSERT INTO users (username, password, user_token, personal_number, can_publish_posts, cyber_defence_level, extra_data)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id;"""
         
         for (itr, user_data) in enumerate(users):
             username = user_data["username"]
             password = user_data["password"]
+            can_publish_posts = user_data["can_publish_posts"]
+            cyber_defence_level = user_data["cyber_defence_level"]
             extra_data = user_data.get("extra_data", {})
 
             if not validate_user(username, password, json.dumps(extra_data, ensure_ascii=False).encode("utf-8")):
                 continue
 
             hashed_password = hash_password(password, password_hasher)
-            insert_user_params = (username, hashed_password, None, personal_numbers[itr], Json(extra_data))
+            insert_user_params = (username, hashed_password, None, personal_numbers[itr], can_publish_posts, cyber_defence_level, Json(extra_data))
             db_cursor.execute(insert_user_sql, insert_user_params)
 
             user_id = db_cursor.fetchone()[0]

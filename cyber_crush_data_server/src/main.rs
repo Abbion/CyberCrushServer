@@ -29,6 +29,8 @@ struct GetUserDataResponse {
     response_status: ResponseStatus,
     username: String,
     personal_number: String,
+    can_publish_posts: bool,
+    cyber_defence_level: i32,
     extra_data: String,
 }
 
@@ -101,17 +103,23 @@ async fn get_user_data(State(state): State<Arc<ServerState>>, Json(payload): Jso
     struct UserDataQuery {
         username: String,
         personal_number: i32,
+        can_publish_posts: bool,
+        cyber_defence_level: i32,
         extra_data: serde_json::Value,
     }
 
     let user_data_query = sqlx::query_as::<_, UserDataQuery>(
-        r#"SELECT username, personal_number, extra_data FROM users WHERE user_token = $1"#)
+        r#"SELECT username, personal_number, can_publish_posts, cyber_defence_level, extra_data FROM users WHERE user_token = $1"#)
         .bind(&payload.token)
         .fetch_optional(&state.db_pool)
         .await;
     
     let response = match user_data_query {
-        Ok(Some(user_data)) => GetUserDataResponse::success(user_data.username, user_data.personal_number.to_string(), user_data.extra_data.to_string()),
+        Ok(Some(user_data)) => GetUserDataResponse::success(user_data.username,
+                                                            user_data.can_publish_posts,
+                                                            user_data.cyber_defence_level,
+                                                            user_data.personal_number.to_string(),
+                                                            user_data.extra_data.to_string()),
         Ok(None) => GetUserDataResponse::fail("No user data found."),
         Err(error) => {
             eprintln!("Error: Getting user data failed for token: {}. Error: {}", payload.token, error);
