@@ -35,7 +35,14 @@ struct PostNewsArticleRequest {
     content: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct DeleteNewsArticleRequest {
+    token: String,
+    post_id: i32,
+}
+
 use ResponseStatus as PostNewsArticleResponse;
+use ResponseStatus as DeleteNewsArticleResponse;
 
 #[derive(Debug)]
 struct ServerState {
@@ -56,6 +63,7 @@ async fn main() {
         .route("/hello", get(hello))
         .route("/get_news_feed", get(get_news_feed))
         .route("/post_news_article", post(post_news_article))
+        .route("/delete_news_article", post(delete_news_article))
         .with_state(server_state);
 
     axum::serve(listener, app).await.unwrap();
@@ -96,7 +104,7 @@ async fn get_news_feed(State(state): State<Arc<ServerState>>) -> impl IntoRespon
 
 async fn post_news_article(State(state): State<Arc<ServerState>>, Json(payload): Json<PostNewsArticleRequest>) -> impl IntoResponse {
     // Retrieve publisher user id
-
+    // TODO add checking for the can_publish flag in user_data
     let user_id_query : Result<Option<i32>, sqlx::Error> = sqlx::query_scalar(
     r#"
         SELECT id
@@ -162,4 +170,51 @@ async fn post_news_article(State(state): State<Arc<ServerState>>, Json(payload):
     }
 
     Json(PostNewsArticleResponse::success())
+}
+
+async fn delete_news_article(State(state): State<Arc<ServerState>>, Json(payload): Json<DeleteNewsArticleRequest>) -> impl IntoResponse {
+    let user_id_query : Result<Option<i32>, sqlx::Error> = sqlx::query_scalar(
+    r#"
+        SELECT id
+        FROM users
+        WHERE user_token = $1
+    "#)
+    .bind(&payload.token)
+    .fetch_optional(&state.db_pool)
+    .await;
+    
+    let user_id = match user_id_query {
+        Ok(Some(user_id)) => user_id,
+        Ok(None) => {
+            return Json(DeleteNewsArticleResponse::fail("Post publisher not found".into()));
+        },
+        Err(error) => {
+            eprintln!("Error: Deleting news article failed while getting publisher id for token: {}, Error: {}", payload.token, error);
+            return Json(DeleteNewsArticleResponse::fail("Deleting news article publisher identyfication internal server error!".into()));
+        }
+    };
+
+    let delete_post_query = sqlx::query(
+    r#"
+        DELETE FROM news_articles
+        WHERE id = $1 and user_id = $2
+    "#)
+    .bind(&payload.post_id)
+    .bind(&user_id)
+    .execute(&state.db_pool)
+    .await;
+
+    match delete_post_query {
+        Ok(result) => {
+            if result.rows_affected() == 0 {
+                return Json(DeleteNewsArticleResponse::fail("No article was deleted".into()));
+            } 
+        }
+        Err(error) => {
+            eprintln!("Error: Deleting news article failed while querying for delete: {}, Error: {}", payload.token, error);
+            return Json(DeleteNewsArticleResponse::fail("Deleting news internal server error: 1!".into()));
+        }
+    }
+
+    Json(DeleteNewsArticleResponse::success())
 }
