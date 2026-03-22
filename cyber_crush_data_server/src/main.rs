@@ -39,12 +39,16 @@ impl GetUserDataResponse {
         GetUserDataResponse{ response_status: ResponseStatus::fail(reason.into()),
                             username: "".into(),
                             personal_number: "".into(),
+                            can_publish_posts: false,
+                            cyber_defence_level: 0,
                             extra_data: "".into() }
     }
 
-    fn success(username: String, personal_number: String, extra_data: String) -> GetUserDataResponse {
+    fn success(username: String, personal_number: String, can_publish_posts: bool, cyber_defence_level: i32, extra_data: String) -> GetUserDataResponse {
         GetUserDataResponse{ response_status: ResponseStatus::success(),
                             username,
+                            can_publish_posts,
+                            cyber_defence_level,
                             personal_number,
                             extra_data }
     }
@@ -116,9 +120,9 @@ async fn get_user_data(State(state): State<Arc<ServerState>>, Json(payload): Jso
     
     let response = match user_data_query {
         Ok(Some(user_data)) => GetUserDataResponse::success(user_data.username,
+                                                            user_data.personal_number.to_string(),
                                                             user_data.can_publish_posts,
                                                             user_data.cyber_defence_level,
-                                                            user_data.personal_number.to_string(),
                                                             user_data.extra_data.to_string()),
         Ok(None) => GetUserDataResponse::fail("No user data found."),
         Err(error) => {
