@@ -35,13 +35,18 @@ struct PostNewsArticleRequest {
     content: String,
 }
 
+#[derive(Debug, Serialize)]
+struct PostNewsArticleResponse {
+    response_status: ResponseStatus,
+    post_id: i32,
+}
+
 #[derive(Debug, Deserialize)]
 struct DeleteNewsArticleRequest {
     token: String,
     post_id: i32,
 }
 
-use ResponseStatus as PostNewsArticleResponse;
 use ResponseStatus as DeleteNewsArticleResponse;
 
 #[derive(Debug)]
@@ -118,58 +123,63 @@ async fn post_news_article(State(state): State<Arc<ServerState>>, Json(payload):
     let user_id = match user_id_query {
         Ok(Some(user_id)) => user_id,
         Ok(None) => {
-            return Json(PostNewsArticleResponse::fail("Post publisher not found".into()));
+            return Json(PostNewsArticleResponse{ 
+                response_status: ResponseStatus::fail("Post publisher not found".into()),
+                post_id: -1 });
         },
         Err(error) => {
             eprintln!("Error: Posting news article failed while getting publisher id for token: {}, Error: {}", payload.token, error);
-            return Json(PostNewsArticleResponse::fail("Posting news article publisher identyfication internal server error!".into()));
+            return Json(PostNewsArticleResponse{ 
+                response_status: ResponseStatus::fail("Posting news article publisher identyfication internal server error!".into()),
+                post_id: -1 });
         }
     };
 
     let mut transaction: Transaction<'_, Postgres> = match state.db_pool.begin().await {
         Ok(transaction) => transaction,
         Err(error) => {
-            eprintln!("Error: Posting news failed while starting the transaction. Error: {}", error);
-            return Json(PostNewsArticleResponse::fail("Posting news internal server Error: 1!".into()));
+            eprintln!("Error: Posting news failed while starting the transaction. Error: {}", error); 
+            return Json(PostNewsArticleResponse{ 
+                response_status: ResponseStatus::fail("Posting news internal server Error: 1!".into()),
+                post_id: -1 });
         }
     };
 
 
-    let create_news_article_query = sqlx::query(
+    let create_news_article_query = sqlx::query_scalar::<_, i32>(
     r#"
         INSERT INTO news_articles
         (user_id, title, content, timestamp)
         VALUES ($1, $2, $3, NOW())
+        RETURNING id
     "#)
     .bind(user_id)
     .bind(payload.title)
     .bind(payload.content)
-    .execute(&mut *transaction)
+    .fetch_one(&mut *transaction)
     .await;
 
-    match create_news_article_query {
-        Ok(result) => {
-            if result.rows_affected() == 0 {
-                return Json(PostNewsArticleResponse::fail("News article failed to post".into()));
-            }
-            if result.rows_affected() != 1 {
-                eprintln!("Error: Posting news article failed too many rows affected while inserting transaction!");
-                return Json(PostNewsArticleResponse::fail("Posting news internal server error: 2!".into()));
-            }
+    let response = match create_news_article_query {
+        Ok(id) => {
+            PostNewsArticleResponse{ response_status: ResponseStatus::success(), post_id: id }
         },
         Err(error) => {
             eprintln!("Error: Posting news article failed while inserting. Error: {}", error);
-            return Json(PostNewsArticleResponse::fail("Posting news internal server error: 3!".into()));
+            PostNewsArticleResponse{ 
+                response_status: ResponseStatus::fail("Posting news internal server Error: 2!".into()),
+                post_id: -1 }
         }
     };
 
     let commited_transaction = transaction.commit().await;
     if commited_transaction.is_err() {
         eprintln!("Error: Posting news failed while commiting transaction. Error: {}", commited_transaction.unwrap_err());
-        return Json(PostNewsArticleResponse::fail("Posting news internal server error: 4!".into()));
+        return Json(PostNewsArticleResponse{ 
+                response_status: ResponseStatus::fail("Posting news internal server Error: 3!".into()),
+                post_id: -1 });
     }
 
-    Json(PostNewsArticleResponse::success())
+    Json(response)
 }
 
 async fn delete_news_article(State(state): State<Arc<ServerState>>, Json(payload): Json<DeleteNewsArticleRequest>) -> impl IntoResponse {
