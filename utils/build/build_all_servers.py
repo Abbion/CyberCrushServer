@@ -1,6 +1,6 @@
 import subprocess
 
-components = [ "authentication", "bank", "chat", "data", "news" ]
+components = [ "authentication", "bank", "chat", "data", "news", "game_state" ]
 
 def run_tmux_session(name):
     server_dir = "cyber_crush_" + name + "_server"

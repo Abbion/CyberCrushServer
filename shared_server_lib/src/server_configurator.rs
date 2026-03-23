@@ -15,6 +15,7 @@ pub struct ServerConfiguration {
     bank_server_port: u16,
     chat_server_port: u16,
     news_server_port: u16,
+    game_state_server_port: u16,
 }
 
 pub enum ServerType {
@@ -22,7 +23,8 @@ pub enum ServerType {
     Data,
     Bank,
     Chat,
-    News
+    News,
+    GameState,
 }
 
 impl ServerConfiguration {
@@ -49,6 +51,7 @@ impl ServerConfiguration {
             ServerType::Bank => format!("{}:{}", self.server_address, self.bank_server_port),
             ServerType::Chat => format!("{}:{}", self.server_address, self.chat_server_port),
             ServerType::News => format!("{}:{}", self.server_address, self.news_server_port),
+            ServerType::GameState => format!("{}:{}", self.server_address, self.game_state_server_port)
         };
 
         addr_str.parse().expect("Invalid ip address")
