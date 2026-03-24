@@ -1,5 +1,5 @@
 # CyberCrush backend
-##### version: indev 0.2v
+##### version: 1.0.0
 This project was created to implement software-based user interactions for the **CyberCrush LARP** event. This repository only contains the backend of the project, the mobile app is available at [CyberCrushMobileApp](https://github.com/Abbion/CyberCrushMobileApp).
 
 The servers are written in Rust using Tokio and Axum. On the database side, PostgreSQL was chosen. Python scripts run utility tools. For more information about each server or tool, navigate to the appropriate folder.
