@@ -53,7 +53,29 @@ This server connects to a PostgreSQL database and requires proper configuration 
         "success": "true/false",
         "message": "string"
       }
+      "post_id": "int"
     }
 - **Description**
     - Returns `true` status if the token is valid and the article is successfully saved in the database.
     - Returns `false` if the token is not valid or an server error occurs.
+    - When the call fails the post_value is set to `-1`
+
+### **POST** `/delete_news_article`
+- **Input**
+    ```json
+    {
+      "token": "string",
+      "post_id": int
+    }
+- **Output**
+    ```json
+    {
+      "response_status":
+      {
+        "success": "true/false",
+        "message": "string"
+      }
+    }
+- **Description**
+    - Returns `true` status if the token is valid and the article exists and was deleted.
+    - Returns `false` status if token is not valid, article does not exist or cannot be deleted.
