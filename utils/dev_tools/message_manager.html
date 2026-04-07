@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Cyber crush chat manager</title>
+        <style>
+            body {
+                display: flex;
+                max-width: 96em;
+                margin: auto;
+                align-items: flex-start;
+                background-color: #63345E;
+            }
+
+            #left_panel {
+                flex: 0 0 20%;
+                display: flex;
+                flex-direction: column;
+
+                max-height: 100dvh;
+                overflow: auto;
+            }
+
+            #right_panel {
+                flex: 0 0 80%;
+                display: flex;
+                flex-direction: column;
+                background-color: #B7C0DD;
+
+                margin-left: 0.25em;
+                max-height: 100dvh;
+                overflow: auto;
+                gap: 5px;
+            }
+
+            #control_panel {
+                display: flex;
+                flex-direction: row;
+                gap: 5px;
+                width: 100%;
+            }
+            #new_direct_chat, 
+            #new_group_chat,
+            #new_chat_selector {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                margin-top: 50px;
+                margin-bottom: 50px;
+                gap: 5px;
+                text-align: center;
+            }
+
+            #new_group_chat_user_selector {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 5px;
+            }
+
+            #chat_editor {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+            }
+
+            #new_direct_chat, 
+            #new_group_chat, 
+            #chat_editor {
+                display: none;
+            }
+
+            #edit_chat_name {
+                margin: 10px;
+                font-weight: bold;
+                font-size: 1.2em;
+                padding: 5px;
+                border: 1px solid black;
+                border-radius: 5px;
+            }
+
+            #add_message_actions {
+                display: flex;
+                gap: 10px; 
+                padding: 10px; 
+                align-items: center; 
+                background-color: #A3ADC9; 
+                border-top: 1px solid black;
+            }
+
+            #add_message_with_offset_actions {
+                display: flex; 
+                align-items: center; 
+                gap: 5px; 
+                border-left: 2px solid black; 
+                padding-left: 10px;
+            }
+            
+            #message_offset {
+                width: 50px;
+                padding: 3px;
+            }
+
+            .active-panel {
+                display: flex !important;
+            }
+
+            .message-entry {
+                background-color: #D1D9F0;
+                border: 1px solid #4A2445;
+                padding: 10px;
+                margin: 10px;
+                display: flex;
+                flex-direction: column;
+                border-radius: 5px;
+            }
+
+            .message-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                width: 100%;
+                margin-bottom: 5px;
+            }
+
+            .radio-container {
+                flex-grow: 1;
+                display: flex;
+                justify-content: center;
+                gap: 15px;
+            }
+
+            .message-input {
+                flex-grow: 1;
+                margin-right: 10px;
+                padding: 5px;
+                resize: vertical;
+                min-height: 50px;
+                max-height: 200px;
+                font-family: inherit;
+            }
+
+            .delete-message-btn {
+                background-color: #ff4d4d;
+                color: white;
+                border: none;
+                cursor: pointer;
+                padding: 2px 8px;
+                font-weight: bold;
+            }
+
+            .message-number {
+                font-weight: bold;
+                margin-right: 10px;
+                color: #4A2445;
+                min-width: 25px;
+            }
+        </style>
+    </head>
+
+    <script defer>
+        const max_users_in_group_chat = 16
+
+        var usernames = []
+        var users_in_current_group_chat = 0
+        var chat_id = 0
+
+        const ChatType = Object.freeze({
+            None: Symbol("none"),
+            Direct: Symbol("direct"),
+            Group: Symbol("group")
+        })
+
+        var current_chat_type = ChatType.None;
+        var current_edited_chat_id = -1
+        var current_is_dirty = false;
+        var current_message_counter = 0
+
+        //Current direct chat data
+        var current_direct_user_a = ""
+        var current_direct_user_b = ""
+
+        //Current group chat data
+        var current_users = []
+
+        var all_chats = []
+
+        //===============================================================================
+        function mark_dirty() {
+            current_is_dirty = true;
+        }
+
+        function check_unsaved_changes() {
+            if (current_is_dirty) {
+                return confirm("Masz niezapisane zmiany. Czy na pewno chcesz je odrzucić?");
+            }
+            return true;
+        }
+
+        function renumber_messages() {
+            const numbers = document.querySelectorAll('.message-number');
+            numbers.forEach((span, index) => {
+                span.textContent = `${index + 1}.`;
+            });
+        }
+
+        function save_current_chat() {
+            if (current_chat_type === ChatType.None) {
+                alert("Brak aktywnego czatu do zapisania.");
+                return;
+            }
+
+            const messageEntries = document.querySelectorAll('.message-entry');
+            if (messageEntries.length === 0) {
+                alert("Czat musi zawierać co najmniej jedną wiadomość.");
+                return;
+            }
+
+            const messages = [];
+            messageEntries.forEach(entry => {
+                let sender = "";
+                
+                if (current_chat_type === ChatType.Direct) {
+                    const checkedRadio = entry.querySelector('input[type="radio"]:checked');
+                    sender = checkedRadio ? checkedRadio.value : "";
+                }
+                else {
+                    const select = entry.querySelector('.message-sender-select');
+                    sender = select ? select.value : "";
+                }
+
+                const messageText = entry.querySelector('.message-input').value;
+                const timestamp = entry.querySelector('.message-datetime').value;
+
+                if (!sender || sender === "Wybierz nadawcę") {
+                    alert(`Wybierz nadawcę dla wiadomości ${messages.length + 1}.`);
+                    throw new Error("Missing sender");
+                }
+
+                messages.push({
+                    sender: sender,
+                    message: messageText,
+                    timestamp: timestamp
+                });
+            });
+
+            // Validate chronological order
+            for (let i = 1; i < messages.length; i++) {
+                const prevTime = new Date(messages[i-1].timestamp);
+                const currTime = new Date(messages[i].timestamp);
+                
+                if (currTime < prevTime) {
+                    alert(`Błąd: Wiadomości nie są w kolejności chronologicznej! Wiadomość ${i+1} jest starsza niż wiadomość ${i}. Proszę poprawić daty przed zapisaniem.`);
+                    return;
+                }
+            }
+
+            const chatName = document.getElementById('edit_chat_name').value || (current_chat_type === ChatType.Direct ? `${current_direct_user_a} & ${current_direct_user_b}` : `Grupa ${current_edited_chat_id}`);
+
+            const chatData = {
+                id: current_edited_chat_id,
+                type: current_chat_type === ChatType.Direct ? "direct" : "group",
+                name: chatName,
+                users: current_chat_type === ChatType.Direct ? [current_direct_user_a, current_direct_user_b] : [...current_users],
+                messages: messages
+            };
+
+            const existingIndex = all_chats.findIndex(c => c.id === current_edited_chat_id);
+            if (existingIndex !== -1) {
+                all_chats[existingIndex] = chatData;
+            } 
+            else {
+                all_chats.push(chatData);
+            }
+
+            update_chat_list_ui();
+            current_is_dirty = false;
+            alert("Czat został zapisany.");
+        }
+
+        function delete_current_chat() {
+            if (current_edited_chat_id === -1) {
+                alert("Wybierz czat, który chcesz usunąć.");
+                return;
+            }
+
+            const chat = all_chats.find(c => c.id === current_edited_chat_id);
+            const chatName = chat ? chat.name : "ten czat";
+
+            const confirmDelete = confirm(`Czy na pewno chcesz usunąć czat: "${chatName}"?`);
+            if (confirmDelete) {
+                all_chats = all_chats.filter(c => c.id !== current_edited_chat_id);
+                update_chat_list_ui();
+                current_is_dirty = false;
+                create_new_chat();
+                current_edited_chat_id = -1;
+                current_chat_type = ChatType.None;
+                alert("Czat został usunięty.");
+            }
+        }
+
+        function update_chat_list_ui() {
+            const chatList = document.getElementById('chat_list');
+            chatList.innerHTML = "";
+            all_chats.forEach(chat => {
+                const option = document.createElement('option');
+                option.value = chat.id;
+                option.textContent = `[${chat.type === 'direct' ? 'D' : 'G'}] ${chat.name}`;
+                option.onclick = () => {
+                    if (chat.id !== current_edited_chat_id) {
+                        if (check_unsaved_changes()) {
+                            load_chat(chat.id);
+                        }
+                    }
+                };
+                chatList.appendChild(option);
+            });
+        }
+
+        function load_chat(id) {
+            const chat = all_chats.find(c => c.id === id);
+            if (!chat) return;
+
+            // Reset UI and internal state
+            const messageLog = document.getElementById('message_log');
+            messageLog.innerHTML = "";
+            current_message_counter = 0;
+
+            current_chat_type = chat.type === "direct" ? ChatType.Direct : ChatType.Group;
+            current_edited_chat_id = chat.id;
+
+            const editChatNameInput = document.getElementById('edit_chat_name');
+            editChatNameInput.value = chat.name;
+
+            if (current_chat_type === ChatType.Direct) {
+                current_direct_user_a = chat.users[0];
+                current_direct_user_b = chat.users[1];
+                editChatNameInput.readOnly = true;
+            } 
+            else {
+                current_users = [...chat.users];
+                document.getElementById('group_chat_name').value = chat.name;
+                editChatNameInput.readOnly = false;
+            }
+
+            const panels = ['new_direct_chat', 'new_group_chat', 'chat_editor'];
+            panels.forEach(pId => {
+                document.getElementById(pId).style.display = (pId === 'chat_editor') ? 'flex' : 'none';
+            });
+            document.getElementById("new_chat_selector").style.display = 'none';
+
+            chat.messages.forEach(msg => {
+                add_message();
+                const lastEntry = messageLog.lastElementChild;
+                
+                if (current_chat_type === ChatType.Direct) {
+                    const radios = lastEntry.querySelectorAll('input[type="radio"]');
+                    radios.forEach(r => {
+                        if (r.value === msg.sender) r.checked = true;
+                    });
+                } 
+                else {
+                    const select = lastEntry.querySelector('.message-sender-select');
+                    select.value = msg.sender;
+                }
+
+                lastEntry.querySelector('.message-input').value = msg.message;
+                lastEntry.querySelector('.message-datetime').value = msg.timestamp;
+            });
+
+            current_is_dirty = false;
+        }
+
+        function add_message(offsetMinutes = 0) {
+            mark_dirty();
+            const messageLog = document.getElementById('message_log');
+            const entryId = current_message_counter++;
+
+            const entryDiv = document.createElement('div');
+            entryDiv.id = `message_entry_${entryId}`;
+            entryDiv.className = 'message-entry';
+
+            const row1 = document.createElement('div');
+            row1.className = 'message-row';
+
+            const numberSpan = document.createElement('span');
+            numberSpan.className = 'message-number';
+            numberSpan.textContent = `${messageLog.children.length + 1}.`;
+
+            const senderContainer = document.createElement('div');
+            senderContainer.className = 'radio-container';
+
+            if (current_chat_type === ChatType.Direct) {
+                const radioA = document.createElement('input');
+                radioA.type = 'radio';
+                radioA.name = `sender_${entryId}`;
+                radioA.value = current_direct_user_a;
+                radioA.id = `sender_a_${entryId}`;
+                radioA.checked = true;
+                radioA.onchange = mark_dirty;
+
+                const labelA = document.createElement('label');
+                labelA.htmlFor = `sender_a_${entryId}`;
+                labelA.textContent = current_direct_user_a;
+
+                const radioB = document.createElement('input');
+                radioB.type = 'radio';
+                radioB.name = `sender_${entryId}`;
+                radioB.value = current_direct_user_b;
+                radioB.id = `sender_b_${entryId}`;
+                radioB.onchange = mark_dirty;
+
+                const labelB = document.createElement('label');
+                labelB.htmlFor = `sender_b_${entryId}`;
+                labelB.textContent = current_direct_user_b;
+
+                senderContainer.appendChild(radioA);
+                senderContainer.appendChild(labelA);
+                senderContainer.appendChild(radioB);
+                senderContainer.appendChild(labelB);
+            } 
+            else if (current_chat_type === ChatType.Group) {
+                const select = document.createElement('select');
+                select.className = 'message-sender-select';
+                select.onchange = mark_dirty;
+
+                const defaultOption = document.createElement('option');
+                defaultOption.disabled = true;
+                defaultOption.selected = true;
+                defaultOption.hidden = true;
+                defaultOption.textContent = 'Wybierz nadawcę';
+                select.appendChild(defaultOption);
+
+                current_users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user;
+                    option.textContent = user;
+                    select.appendChild(option);
+                });
+                senderContainer.appendChild(select);
+            }
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'X';
+            deleteBtn.className = 'delete-message-btn';
+            deleteBtn.onclick = () => delete_message(entryId);
+
+            row1.appendChild(numberSpan);
+            row1.appendChild(senderContainer);
+            row1.appendChild(deleteBtn);
+
+            const row2 = document.createElement('div');
+            row2.className = 'message-row';
+
+            const messageInput = document.createElement('textarea');
+            messageInput.placeholder = 'Wpisz wiadomość...';
+            messageInput.className = 'message-input';
+            messageInput.oninput = mark_dirty;
+
+            const dateTimeInput = document.createElement('input');
+            dateTimeInput.type = 'datetime-local';
+            dateTimeInput.className = 'message-datetime';
+            dateTimeInput.oninput = mark_dirty;
+
+            const lastEntry = messageLog.lastElementChild;
+            if (lastEntry) {
+                const lastDateTimeStr = lastEntry.querySelector('.message-datetime').value;
+                if (offsetMinutes === 0) {
+                    dateTimeInput.value = lastDateTimeStr;
+                } 
+                else {
+                    const date = new Date(lastDateTimeStr);
+                    date.setMinutes(date.getMinutes() + offsetMinutes);
+                    // Correctly format to local YYYY-MM-DDTHH:mm
+                    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+                    dateTimeInput.value = localDate.toISOString().slice(0, 16);
+                }
+            } 
+            else {
+                const now = new Date();
+                const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+                dateTimeInput.value = localNow.toISOString().slice(0, 16);
+            }
+
+            row2.appendChild(messageInput);
+            row2.appendChild(dateTimeInput);
+
+            entryDiv.appendChild(row1);
+            entryDiv.appendChild(row2);
+
+            messageLog.appendChild(entryDiv);
+        }
+
+        function add_message_with_offset() {
+            const offsetInput = document.getElementById('message_offset');
+            const offset = parseInt(offsetInput.value) || 0;
+            add_message(offset);
+        }
+
+        function create_group_chat() {
+            const chatNameInput = document.getElementById('group_chat_name');
+            const chatName = chatNameInput.value.trim();
+
+            if (!chatName) {
+                alert("Wprowadź nazwę czatu");
+                return;
+            }
+
+            const selectedUsers = [];
+            for (let i = 0; i < users_in_current_group_chat; i++) {
+                const selector = document.getElementById("new_group_chat_select_" + i);
+                if (selector && selector.value) {
+                    selectedUsers.push(selector.value);
+                } else {
+                    alert("Wybierz użytkownika dla wszystkich pól");
+                    return;
+                }
+            }
+
+            if (selectedUsers.length < 1) {
+                alert("Wybierz co najmniej jednego użytkownika");
+                return;
+            }
+
+            const uniqueUsers = new Set(selectedUsers);
+            if (uniqueUsers.size !== selectedUsers.length) {
+                alert("Użytkownicy w czacie grupowym muszą być unikalni");
+                return;
+            }
+
+            current_users = selectedUsers;
+            chat_id += 1;
+
+            start_edit_mode(ChatType.Group, chat_id);
+        }
+
+        function delete_message(entryId) {
+            const entry = document.getElementById(`message_entry_${entryId}`);
+            if (entry) {
+                mark_dirty();
+                entry.remove();
+                renumber_messages();
+            }
+        }
+
+        function show_chat_creation_panel(panelId) {
+            const panels = ['new_direct_chat', 'new_group_chat', 'chat_editor'];
+            panels.forEach(id => {
+                document.getElementById(id).style.display = (id === panelId) ? 'flex' : 'none';
+            });
+
+            document.getElementById("new_chat_selector").style.display = 'none';
+
+            reset_layout()
+            users_in_current_group_chat = 0
+            update_free_slots_in_group_chat()
+        }
+
+        function create_new_chat() {
+            if (!check_unsaved_changes()) return;
+
+            document.getElementById("new_chat_selector").style.display = 'flex';
+
+            const panels = ['new_direct_chat', 'new_group_chat', 'chat_editor'];
+            panels.forEach(id => {
+                document.getElementById(id).style.display = 'none';
+            });
+
+            current_edited_chat_id = -1;
+            current_chat_type = ChatType.None;
+            current_is_dirty = false;
+        }
+
+        function export_chats_to_json() {
+            const exportData = {
+                metadata: {
+                    usernames: usernames
+                },
+                direct_user_chats: [],
+                group_user_chats: []
+            };
+
+            all_chats.forEach(chat => {
+                const formattedTimestamp = (ts) => ts.replace('T', ' ') + ':00';
+
+                if (chat.type === "direct") {
+                    const directChat = {
+                        user_a: chat.users[0],
+                        user_b: chat.users[1],
+                        messages: chat.messages.map(msg => ({
+                            sender: msg.sender === chat.users[0] ? "a" : "b",
+                            content: msg.message,
+                            time_stamp: formattedTimestamp(msg.timestamp)
+                        }))
+                    };
+                    exportData.direct_user_chats.push(directChat);
+                } 
+                else {
+                    const groupChat = {
+                        admin: chat.users[0],
+                        title: chat.name
+                    };
+                    
+                    chat.users.forEach((user, index) => {
+                        groupChat[`user_${index + 1}`] = user;
+                    });
+
+                    groupChat.messages = chat.messages.map(msg => ({
+                        sender: chat.users.indexOf(msg.sender) + 1,
+                        content: msg.message,
+                        time_stamp: formattedTimestamp(msg.timestamp)
+                    }));
+
+                    exportData.group_user_chats.push(groupChat);
+                }
+            });
+
+            const blob = new Blob([JSON.stringify(exportData, null, 4)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'cyber_crush_chats.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        async function import_chats_from_json(file_input) {
+            let file = file_input.files[0];
+            if (!file) return;
+
+            try {
+                const content = await file.text();
+                const data = JSON.parse(content);
+
+                if (data.metadata && data.metadata.usernames) {
+                    usernames = data.metadata.usernames;
+                    populate_direct_user_selects();
+                }
+
+                all_chats = [];
+                chat_id = 0;
+
+                const parseTimestamp = (ts) => ts.replace(' ', 'T').slice(0, 16);
+
+                // Import Direct Chats
+                if (data.direct_user_chats) {
+                    data.direct_user_chats.forEach(dChat => {
+                        chat_id++;
+                        const chatUsers = [dChat.user_a, dChat.user_b];
+                        all_chats.push({
+                            id: chat_id,
+                            type: "direct",
+                            name: `${dChat.user_a} & ${dChat.user_b}`,
+                            users: chatUsers,
+                            messages: dChat.messages.map(msg => ({
+                                sender: msg.sender === "a" ? dChat.user_a : dChat.user_b,
+                                message: msg.content,
+                                timestamp: parseTimestamp(msg.time_stamp)
+                            }))
+                        });
+                    });
+                }
+
+                // Import Group Chats
+                if (data.group_user_chats) {
+                    data.group_user_chats.forEach(gChat => {
+                        chat_id++;
+                        const chatUsers = [];
+                        let userIdx = 1;
+                        while (gChat[`user_${userIdx}`]) {
+                            chatUsers.push(gChat[`user_${userIdx}`]);
+                            userIdx++;
+                        }
+
+                        all_chats.push({
+                            id: chat_id,
+                            type: "group",
+                            name: gChat.title,
+                            users: chatUsers,
+                            messages: gChat.messages.map(msg => ({
+                                sender: chatUsers[msg.sender - 1],
+                                message: msg.content,
+                                timestamp: parseTimestamp(msg.time_stamp)
+                            }))
+                        });
+                    });
+                }
+
+                update_chat_list_ui();
+                create_new_chat(); // Reset UI to main menu
+                current_is_dirty = false;
+                alert("Pomyślnie zaimportowano czaty.");
+            } catch (error) {
+                alert(`Błąd podczas importu czatów: ${error}`);
+            }
+        }
+
+        function import_users() {
+            document.getElementById("import_users_input").click()
+        }
+
+        async function import_users_from_file(file_input) {
+            let file = file_input.files[0]
+            if (!file) {
+                alert("Nie udało się zaimportować pliku")
+                return
+            }
+
+            try {
+                const content = await file.text()
+                const users_data = JSON.parse(content)
+                usernames = []
+                usernames = users_data.map(user => user.username)
+                alert("Udało się wczytać użytkowników")
+                populate_direct_user_selects()
+            } 
+            catch (error) {
+                alert(`Błąd podczas importu: ${error}`);
+            }
+        }
+
+        function populate_direct_user_selects() {
+            const selectA = document.getElementById('direct_user_a');
+            const selectB = document.getElementById('direct_user_b');
+
+            selectA.innerHTML = '<option value="" disabled selected hidden>Użytkownik 1</option>';
+            selectB.innerHTML = '<option value="" disabled selected hidden>Użytkownik 2</option>';
+
+            usernames.forEach(name => {
+                const optionA = document.createElement('option');
+                optionA.value = name;
+                optionA.textContent = name;
+                selectA.appendChild(optionA);
+
+                const optionB = optionA.cloneNode(true);
+                selectB.appendChild(optionB);
+            });
+        }
+
+        function add_user_to_group_chat() {
+            if (users_in_current_group_chat >= max_users_in_group_chat) {
+                alert("Osiągnięto limit użytkowników czatu")
+                return
+            }
+
+            const group_chat_user_selector = document.getElementById('new_group_chat_user_selector');
+
+            const selector = document.createElement('select');
+            selector.id = "new_group_chat_select_" + String(users_in_current_group_chat)
+            selector.innerHTML = '<option value="" disabled selected hidden>Użytkownik</option>';
+
+            usernames.forEach(name => {
+                const user_option= document.createElement('option');
+                user_option.value = name;
+                user_option.textContent = name;
+                selector.appendChild(user_option);
+            });
+
+            group_chat_user_selector.appendChild(selector)
+
+            users_in_current_group_chat += 1
+            update_free_slots_in_group_chat()
+        }
+
+        function remove_last_user_from_group_chat() {
+            if (users_in_current_group_chat < 1) {
+                alert("Brak użytkowników do usunięcia")
+                return
+            }
+
+            const group_chat_user_selector = document.getElementById('new_group_chat_user_selector');
+            let last_added_user = document.getElementById("new_group_chat_select_" + String(users_in_current_group_chat - 1))
+            console.log(last_added_user)
+            group_chat_user_selector.removeChild(last_added_user)
+            users_in_current_group_chat -= 1;
+            update_free_slots_in_group_chat()
+        }
+
+        function update_free_slots_in_group_chat() {
+            const free_slots_label = document.getElementById('new_group_chat_slots_label')
+
+            free_slots_label.innerHTML = `Dostępne miejsca ${users_in_current_group_chat}/${max_users_in_group_chat}`
+        }
+
+        function reset_layout() {
+            const selectA = document.getElementById('direct_user_a');
+            const selectB = document.getElementById('direct_user_b');
+            selectA.selectedIndex = 0;
+            selectB.selectedIndex = 0;
+
+            const group_chat_user_selector = document.getElementById('new_group_chat_user_selector');
+            group_chat_user_selector.innerHTML = "";
+            current_chat_type = ChatType.None;
+
+            const group_chat_name = document.getElementById("group_chat_name");
+            group_chat_name.value = ""
+
+            const message_log = document.getElementById("message_log");
+            message_log.innerHTML = ""
+        }
+
+        function create_direct_chat() {
+            const selectA = document.getElementById('direct_user_a');
+            const selectB = document.getElementById('direct_user_b');
+
+            if (selectA.selectedIndex == 0 || selectB.selectedIndex == 0) {
+                alert("Nie wybrano wszystkich użytkowników")
+                return
+            }
+
+            if (selectA.selectedIndex == selectB.selectedIndex) {
+                alert("Wybierz dwóch RÓŻNYCH użytkowników")
+                return
+            }
+
+            current_direct_user_a = selectA.value
+            current_direct_user_b = selectB.value
+            chat_id += 1
+
+            start_edit_mode(ChatType.Direct, chat_id)
+        }
+        
+        function start_edit_mode(chat_type, edit_chat_id) {
+            current_chat_type = chat_type
+            current_edited_chat_id = edit_chat_id
+
+            const panels = ['new_direct_chat', 'new_group_chat', 'chat_editor'];
+            panels.forEach(id => {
+                document.getElementById(id).style.display = (id === 'chat_editor') ? 'flex' : 'none';
+            });
+            document.getElementById("new_chat_selector").style.display = 'none';
+
+            const editChatNameInput = document.getElementById('edit_chat_name');
+            if (chat_type === ChatType.Direct) {
+                editChatNameInput.value = `${current_direct_user_a} & ${current_direct_user_b}`;
+                editChatNameInput.readOnly = true;
+            } else {
+                editChatNameInput.value = document.getElementById('group_chat_name').value;
+                editChatNameInput.readOnly = false;
+            }
+
+            // Add change listener for name edits
+            editChatNameInput.oninput = mark_dirty;
+
+            current_is_dirty = false;
+        }
+    </script>
+    
+    <body>
+        <div id="left_panel">
+            <button onclick="create_new_chat()">Nowy czat</button>
+            <select id="chat_list" size="99">
+            </select>
+        </div>
+            
+        <div id="right_panel">
+            <div id="control_panel">
+                <button id="save_chat_button" onclick="save_current_chat()">Zapisz czat</button>
+                <button id="export_to_file_button" onclick="export_chats_to_json()">Eksportuj do pliku</button>
+                <button id="import_from_file_button" onclick="document.getElementById('import_chats_input').click()">Importuj z pliku</button>
+                <button id="delete_chat_button" onclick="delete_current_chat()">Usuń czat</button>
+                <button id="import_users_button" onclick="import_users()">Importuj użytkowników</button>
+
+                <input id="import_users_input" type="file" accept=".json,application/json" onchange="import_users_from_file(this)" style="display: none;">
+                <input id="import_chats_input" type="file" accept=".json,application/json" onchange="import_chats_from_json(this)" style="display: none;">
+            </div>
+
+            <div id="new_chat_selector">
+                <b>Wybierz typ czatu</b>
+                <div id="new_chat_selector_options">
+                    <button onclick="show_chat_creation_panel('new_direct_chat')">Czat bezpośredni</button>
+                    <button onclick="show_chat_creation_panel('new_group_chat')">Czat grupowy</button>
+                </div>
+            </div>
+
+            <div id="new_direct_chat">
+                <b>Nowy czat bezpośredni</b>
+                <div id="new_direct_chat_label">Wybierz użytkowników</div>
+                <div id="new_direct_user_selector">
+                    <select id="direct_user_a">
+                        <option value="" disabled selected hidden>Użytkownik 1</option>
+                    </select>
+                    <select id="direct_user_b">
+                        <option value="" disabled selected hidden>Użytkownik 2</option>
+                    </select>
+                </div>
+                <button id="create_direct_chat_button" onclick="create_direct_chat()">Stwórz czat</button>
+            </div>
+
+            <div id="new_group_chat">
+                <b>Nowy czat grupowy</b>
+                <input id="group_chat_name" placeholder="Nazwa czatu"/>
+                <div id="new_group_chat_slots_label">Dostępne miejsca 0/16</div>
+                <div id="new_group_chat_label">Wybierz użytkowników</div>
+                <div id="new_group_chat_user_selector">
+
+                </div>
+                <button id="add_user_to_group_chat_button" onclick="add_user_to_group_chat()">Dodaj użytkownika</button>
+                <button id="remove_last_user_from_group_chat_button" onclick="remove_last_user_from_group_chat()">Usuń ostatniego użytkownika</button>
+                <button id="create_group_chat_button" onclick="create_group_chat()">Stwórz czat</button>
+            </div>
+
+            <div id="chat_editor">
+                <input id="edit_chat_name" placeholder="Nazwa czatu"/>
+                <div id="message_log">
+
+                </div>
+                <div id="add_message_actions">
+                    <button id="add_message_button" onclick="add_message()">Dodaj wiadomość (teraz)</button>
+                    <div id="add_message_with_offset_actions">
+                        <span>Offset (min):</span>
+                        <input id="message_offset" type="number" value="1"/>
+                        <button onclick="add_message_with_offset()">Dodaj wiadomość (+)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
