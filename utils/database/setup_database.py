@@ -39,6 +39,7 @@ def init_db():
                 personal_number INT NOT NULL UNIQUE,
                 can_publish_posts BOOLEAN NOT NULL,
             	cyber_defence_level INT NOT NULL,
+                can_hack BOOLEAN NOT NULL,
                 extra_data JSONB
             );
             """)
