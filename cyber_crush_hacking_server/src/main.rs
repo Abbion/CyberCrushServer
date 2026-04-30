@@ -24,6 +24,12 @@ struct HackerInfo {
     can_hack: bool,
 }
 
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct HackableUser {
+    username: String,
+    cyber_defence_level: i32,
+}
+
 #[derive(Debug, Serialize)]
 struct GetHackerInfoResponse {
     response_status: ResponseStatus,
@@ -42,6 +48,12 @@ impl GetHackerInfoResponse {
             response_status: ResponseStatus::success(),
             hacker_info }
     }
+}
+
+#[derive(Debug, Serialize)]
+struct GetHackableUsersResponse {
+    response_status: ResponseStatus,
+    users: Vec::<HackableUser>,
 }
 
 #[derive(Debug)]
@@ -63,6 +75,7 @@ async fn main() {
     let app = Router::new()
         .route("/hello", get(hello))
         .route("/get_hacker_info", post(get_hacker_info))
+        .route("/get_hackable_users", get(get_hackable_users))
         .with_state(server_state.clone());
 
     axum::serve(listener, app).await.unwrap();
@@ -102,13 +115,32 @@ async fn get_hacker_info(State(state): State<Arc<ServerState>>, Json(payload): J
         Ok(None) => GetHackerInfoResponse::fail("User not found"),
         Err(error) => {
             eprintln!("Error: Getting hacker failed for personal code: {}, error: {}", payload.personal_code, error);
-            GetHackerInfoResponse::fail("User not found. Server error!")
+            GetHackerInfoResponse::fail("User not found. Internal server error!")
         }
     };
 
     Json(response) 
 }
 
+async fn get_hackable_users(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
+    let hackable_users_query = sqlx::query_as::<_, HackableUser> (
+    r#"
+        SELECT username, cyber_defence_level FROM users
+        WHERE can_hack = false
+    "#)
+    .fetch_all(&state.db_pool)
+    .await;
+    
+    let response = match hackable_users_query {
+        Ok(users) => GetHackableUsersResponse{ response_status: ResponseStatus::success(), users },
+        Err(error) => {
+            eprintln!("Error: Getting hackable users failed, error: {}", error);
+            GetHackableUsersResponse{ response_status: ResponseStatus::fail("Hackable users not found. Inertnal server error!".into()), users: vec![] }
+        }
+    };
+
+    Json(response)
+}
 
 // Get hacker data
 // Get list of victims with cyber defence level
