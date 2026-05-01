@@ -158,6 +158,19 @@ def init_db():
 
         db_cursor.execute(news_articles_table_query)
 
+        hack_log_table_query = sql.SQL("""
+            CREATE TABLE IF NOT EISTS hack_log (
+                id SERIAL PRIMARY KEY,
+                hacker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                victim_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                hack_type JSONB NOT NULL,
+                successful BOOLEAN NOT NULL,
+                timestamp TIMESTAMP NOT NULL
+            );
+        """)
+
+        db_cursor.execute(hack_log_table_query)
+
         db_connection.commit()
     except Exception:
         if db_connection:
