@@ -14,13 +14,12 @@ use sqlx::PgPool;
 
 #[derive(Debug, Deserialize)]
 struct GetHackerInfoRequest {
-    personal_code: String
+    personal_number: String
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 struct HackerInfo {
     username: String,
-    token: String,
     can_hack: bool,
 }
 
@@ -34,7 +33,7 @@ impl GetHackerInfoResponse {
     fn fail(reason: &str) -> GetHackerInfoResponse {
         GetHackerInfoResponse{
             response_status: ResponseStatus::fail(reason.into()),
-            hacker_info: HackerInfo{ username: "none".into(), token: "none".into(), can_hack: false } }
+            hacker_info: HackerInfo{ username: "".into(), can_hack: false } }
     }
 
     fn success(hacker_info: HackerInfo) -> GetHackerInfoResponse {
@@ -48,7 +47,7 @@ impl GetHackerInfoResponse {
 struct HackableUser {
     username: String,
     cyber_defence_level: i32,
-    personal_code: i32,
+    personal_number: i32,
 }
 
 #[derive(Debug, Serialize)]
@@ -67,8 +66,8 @@ enum HackType {
 
 #[derive(Debug, Deserialize)]
 struct AvailableHackTypesRequest {
-    hacker_personal_code: String,
-    victim_personal_code: String,
+    hacker_personal_number: String,
+    victim_personal_number: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -79,19 +78,19 @@ struct AvailableHackTypesResponse {
 
 #[derive(Debug, Deserialize)]
 struct HackTokenRequest {
-    victim_personal_code: String,
+    victim_personal_number: String,
 }
 
 #[derive(Debug, Serialize)]
 struct HackTokenResponse {
     response_status: ResponseStatus,
-    token: String,
+    token: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct HackStateResultRequest {
-    hacker_personal_code: String,
-    victim_personal_code: String,
+    hacker_personal_number: String,
+    victim_personal_number: String,
     hack_type: HackType,
     hack_successful: bool
 }
@@ -131,17 +130,17 @@ async fn hello() -> &'static str {
 }
 
 async fn get_hacker_info(State(state): State<Arc<ServerState>>, Json(payload): Json<GetHackerInfoRequest>) -> impl IntoResponse {
-    let user_personal_code = parse_personal_code(&payload.personal_code);
-    if user_personal_code < 1 {
+    let user_personal_number = parse_personal_number(&payload.personal_number);
+    if user_personal_number < 1 {
         return Json(GetHackerInfoResponse::fail("Hacker personal code parsing failed"));
     }
 
     let hacker_query = sqlx::query_as::<_, HackerInfo> (
     r#"
-        SELECT username, token, can_hack FROM users
-        WHERE personal_code = $1
+        SELECT username, can_hack FROM users
+        WHERE personal_number = $1
     "#)
-    .bind(&user_personal_code)
+    .bind(&user_personal_number)
     .fetch_optional(&state.db_pool)
     .await;
 
@@ -156,7 +155,7 @@ async fn get_hacker_info(State(state): State<Arc<ServerState>>, Json(payload): J
         },
         Ok(None) => GetHackerInfoResponse::fail("User not found"),
         Err(error) => {
-            eprintln!("Error: Getting hacker failed for personal code: {}, error: {}", payload.personal_code, error);
+            eprintln!("Error: Getting hacker failed for personal code: {}, error: {}", payload.personal_number, error);
             GetHackerInfoResponse::fail("User not found. Internal server error!")
         }
     };
@@ -167,7 +166,7 @@ async fn get_hacker_info(State(state): State<Arc<ServerState>>, Json(payload): J
 async fn get_hackable_users(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
     let hackable_users_query = sqlx::query_as::<_, HackableUser> (
     r#"
-        SELECT username, cyber_defence_level, personal_code FROM users
+        SELECT username, cyber_defence_level, personal_number FROM users
         WHERE can_hack = false
     "#)
     .fetch_all(&state.db_pool)
@@ -191,13 +190,13 @@ async fn get_available_hack_types(State(state): State<Arc<ServerState>>, Json(pa
         successful: bool,
     }
 
-    let hacker_personal_code = parse_personal_code(&payload.hacker_personal_code);
-    if hacker_personal_code < 1 {
+    let hacker_personal_number = parse_personal_number(&payload.hacker_personal_number);
+    if hacker_personal_number < 1 {
         return Json(AvailableHackTypesResponse{ response_status: ResponseStatus::fail("Hacker personal code is not valid. Cannot gather available hacks.".into()), available_hacks: vec![] });
     }
 
-    let victim_personal_code = parse_personal_code(&payload.victim_personal_code);
-    if victim_personal_code < 1 {
+    let victim_personal_number = parse_personal_number(&payload.victim_personal_number);
+    if victim_personal_number < 1 {
         return Json(AvailableHackTypesResponse{ response_status: ResponseStatus::fail("Victim personal code is not valid. Cannot gather available hacks.".into()), available_hacks: vec![] });
     }
 
@@ -213,15 +212,15 @@ async fn get_available_hack_types(State(state): State<Arc<ServerState>>, Json(pa
             AND victim.personal_number = $2;
     "#
     )
-    .bind(&hacker_personal_code)
-    .bind(&victim_personal_code)
+    .bind(&hacker_personal_number)
+    .bind(&victim_personal_number)
     .fetch_all(&state.db_pool)
     .await;
 
     let hacks = match query_result {
         Ok(hacks) => hacks,
         Err(error) => {
-            eprintln!("Failed to query hacker available hacks for: {}, error: {}", hacker_personal_code, error);
+            eprintln!("Failed to query hacker available hacks for: {}, error: {}", hacker_personal_number, error);
             return Json(AvailableHackTypesResponse{ response_status: ResponseStatus::fail("Querying available hacks failed. Internal server error.".into()), available_hacks: vec![] });
         }
     };
@@ -261,18 +260,18 @@ async fn get_available_hack_types(State(state): State<Arc<ServerState>>, Json(pa
 }
 
 async fn get_hack_token(State(state): State<Arc<ServerState>>, Json(payload): Json<HackTokenRequest>) -> impl IntoResponse {
-    let victim_personal_code = parse_personal_code(&payload.victim_personal_code);
-    if victim_personal_code < 1 {
-        return Json(HackTokenResponse{ response_status: ResponseStatus::fail("Victim personal code parsing failed.".into()), token: "".into() });
+    let victim_personal_number = parse_personal_number(&payload.victim_personal_number);
+    if victim_personal_number < 1 {
+        return Json(HackTokenResponse{ response_status: ResponseStatus::fail("Victim personal code parsing failed.".into()), token: None });
     }
 
-    let token_query = sqlx::query_scalar::<_, String>(
+    let token_query = sqlx::query_scalar::<_, Option::<String>>(
     r#"
-        SELECT token FROM users
-        WHERE personal_code = $1
+        SELECT user_token FROM users
+        WHERE personal_number = $1
     "#
     )
-    .bind(&victim_personal_code)
+    .bind(&victim_personal_number)
     .fetch_optional(&state.db_pool)
     .await;
     
@@ -281,11 +280,11 @@ async fn get_hack_token(State(state): State<Arc<ServerState>>, Json(payload): Js
             HackTokenResponse{ response_status: ResponseStatus::success(), token }
         },
         Ok(None) => {
-            HackTokenResponse{ response_status: ResponseStatus::fail("Hack token was not found. Personal code is not assigned to a user.".into()), token: "".into() }
+            HackTokenResponse{ response_status: ResponseStatus::fail("Hack token was not found. Personal code is not assigned to a user.".into()), token: None }
         },
         Err(error) => {
-            eprintln!("Error: Getting hack token failed for code: {}, error: {}", victim_personal_code, error);
-            HackTokenResponse{ response_status: ResponseStatus::fail("Hack token not found. Internal server error!".into()), token: "".into() }
+            eprintln!("Error: Getting hack token failed for code: {}, error: {}", victim_personal_number, error);
+            HackTokenResponse{ response_status: ResponseStatus::fail("Hack token not found. Internal server error!".into()), token: None }
         }
     };
 
@@ -293,13 +292,13 @@ async fn get_hack_token(State(state): State<Arc<ServerState>>, Json(payload): Js
 }
 
 async fn log_hack_state_result(State(state): State<Arc<ServerState>>, Json(payload): Json<HackStateResultRequest>) -> impl IntoResponse {
-    let hacker_personal_code = parse_personal_code(&payload.hacker_personal_code);
-    if hacker_personal_code < 1 {
+    let hacker_personal_number = parse_personal_number(&payload.hacker_personal_number);
+    if hacker_personal_number < 1 {
         return Json(HackStateResultResponse::fail("Hacker personal code is not valid. Cannot log hack.".into()));
     }
 
-    let victim_personal_code = parse_personal_code(&payload.victim_personal_code);
-    if victim_personal_code < 1 {
+    let victim_personal_number = parse_personal_number(&payload.victim_personal_number);
+    if victim_personal_number < 1 {
         return Json(HackStateResultResponse::fail("Victim personal code is not valid. Cannot log hack.".into()));
     }
 
@@ -326,8 +325,8 @@ async fn log_hack_state_result(State(state): State<Arc<ServerState>>, Json(paylo
     )
     .bind(sqlx::types::Json(&payload.hack_type))
     .bind(payload.hack_successful)
-    .bind(hacker_personal_code)
-    .bind(victim_personal_code)
+    .bind(hacker_personal_number)
+    .bind(victim_personal_number)
     .fetch_one(&state.db_pool)
     .await;
     
@@ -344,13 +343,13 @@ async fn log_hack_state_result(State(state): State<Arc<ServerState>>, Json(paylo
     Json(response)
 }
 
-fn parse_personal_code(personal_code: &String) -> i32 {
-    match personal_code.parse::<i32>() {
+fn parse_personal_number(personal_number: &String) -> i32 {
+    match personal_number.parse::<i32>() {
         Ok(code) => { 
             return code;
         },
         Err(error) => {
-            eprintln!("Error: Hacker code failed to parse: {}, error: {}", personal_code, error);
+            eprintln!("Error: Hacker code failed to parse: {}, error: {}", personal_number, error);
             return 0;
         }
     };

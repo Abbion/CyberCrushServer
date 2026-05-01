@@ -159,7 +159,7 @@ def init_db():
         db_cursor.execute(news_articles_table_query)
 
         hack_log_table_query = sql.SQL("""
-            CREATE TABLE IF NOT EISTS hack_log (
+            CREATE TABLE IF NOT EXISTS hack_log (
                 id SERIAL PRIMARY KEY,
                 hacker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 victim_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
