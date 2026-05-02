@@ -8,13 +8,11 @@ This server connects to a PostgreSQL database and requires proper configuration 
 
 ## Endpoints
 ### **GET** `/hello`
-
 **Description:** Returns "Hello, cyber crush news server!" string.
-
 **Use case:** Simple ping to check if the server is running.
 
+---
 ### **GET** `/get_news_feed`
-
 - **Input**: None
 - **Output**
     ```json
@@ -22,7 +20,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
       "response_status":
       {
         "success": "true/false",
-        "message": "string"
+        "status_message": "string"
       },
       "articles": [
         {
@@ -37,6 +35,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
     - Returns `true` status with a list of 75 latests news articles ordered by `timestamp`
     - Returns `false` status with an empty list of articles if an server error occurs.
 
+---
 ### **POST** `/post_news_article`
 - **Input**
     ```json
@@ -51,21 +50,22 @@ This server connects to a PostgreSQL database and requires proper configuration 
       "response_status":
       {
         "success": "true/false",
-        "message": "string"
+        "status_message": "string"
       }
-      "post_id": "int"
+      "post_id": i32
     }
 - **Description**
     - Returns `true` status if the token is valid and the article is successfully saved in the database.
     - Returns `false` if the token is not valid or an server error occurs.
     - When the call fails the post_value is set to `-1`
 
+---
 ### **POST** `/delete_news_article`
 - **Input**
     ```json
     {
       "token": "string",
-      "post_id": int
+      "post_id": i32
     }
 - **Output**
     ```json
@@ -73,7 +73,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
       "response_status":
       {
         "success": "true/false",
-        "message": "string"
+        "status_message": "string"
       }
     }
 - **Description**
