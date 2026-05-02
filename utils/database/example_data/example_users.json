@@ -187,5 +187,57 @@
             "stinky poop" : true,
             "sleepy" : true
         }
+    },
+    {
+        "username" : "Google1",
+        "password" : "Google1Pass!",
+	"can_publish_posts": true,
+	"cyber_defence_level": 3,
+        "extra_data" : {
+	    "race" : "orc",
+	    "job" : "repair technicaian",
+	    "company" : "cargo logi",
+	    "pv-11 chip" : true,
+	    "driver category" : 2
+        }
+    },
+    {
+        "username" : "Google2",
+        "password" : "Google2Pass!",
+	"can_publish_posts": false,
+	"cyber_defence_level": 1,
+        "extra_data" : {
+	    "race" : "elf",
+	    "job" : "music artist",
+	    "pv-11 chip" : false,
+	    "self employed" : true,
+	    "vac-type": 5
+        }
+    },
+    {
+        "username" : "Apple1",
+        "password" : "Apple1Pass!",
+	"can_publish_posts": true,
+	"cyber_defence_level": 3,
+        "extra_data" : {
+	    "race" : "orc",
+	    "job" : "repair technicaian",
+	    "company" : "cargo logi",
+	    "pv-11 chip" : true,
+	    "driver category" : 2
+        }
+    },
+    {
+        "username" : "Apple2",
+        "password" : "Apple2Pass!",
+	"can_publish_posts": false,
+	"cyber_defence_level": 1,
+        "extra_data" : {
+	    "race" : "elf",
+	    "job" : "music artist",
+	    "pv-11 chip" : false,
+	    "self employed" : true,
+	    "vac-type": 5
+        }
     }
 ]

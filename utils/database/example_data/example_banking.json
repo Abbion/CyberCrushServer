@@ -97,5 +97,29 @@
         "current_funds" : 999,
         "transactions" : [
         ]
+    },
+    {
+        "username" : "Google1",
+        "current_funds" : 3600,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Google2",
+        "current_funds" : 1150,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Apple1",
+        "current_funds" : 3600,
+        "transactions" : [
+        ]
+    },
+    {
+        "username" : "Apple2",
+        "current_funds" : 1150,
+        "transactions" : [
+        ]
     }
 ]
