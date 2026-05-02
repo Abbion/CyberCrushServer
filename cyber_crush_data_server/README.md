@@ -14,7 +14,6 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Use case:** Simple ping to check if the server is running.
 
 ---
-
 ### **GET** `/get_all_usernames`
 - **Input:** None
 - **Output:**
@@ -23,13 +22,14 @@ This server connects to a PostgreSQL database and requires proper configuration 
     "response_status": 
     {
       "success": "true/false",
-      "message": "string"
+      "status_message": "string"
     },
     "usernames": ["string"]
   }
 - **Description**
     - Returns `true` status with a list of usernames if successful.
     - Returns `false` status with an error message if the database query fails.
+  
 ---
 ### **POST** `/get_user_data`
 - **Input**
@@ -43,7 +43,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
     "response_status": 
     {
       "success": "true/false",
-      "message": "string"
+      "status_message": "string"
     },
     "username": "string",
     "personal_number": "string",

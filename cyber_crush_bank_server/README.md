@@ -8,13 +8,11 @@ This server connects to a PostgreSQL database and requires proper configuration 
 
 ## Endpoints
 ### **GET** `/hello`
-
 **Description:** Returns "Hello, cyber crush bank server!" string.
-
 **Use case:** Simple ping to check if the server is running.
 
+---
 ### **POST** `/get_user_funds`
-
 - **Input**:
     ```json
     {
@@ -26,14 +24,15 @@ This server connects to a PostgreSQL database and requires proper configuration 
       "response_status":
       {
         "success": "true/false",
-        "message": "string"
+        "status_message": "string"
       },
       "funds": "i32"
     }
 - **Description**
     - Returns `true` status with the user's funds if token is valid.
     - Returns `false` status with -1 funds if no data is found or if a server error occurs.
-
+  
+---
 ### **POST** `/get_user_transaction_history`
 - **Input**
     ```json
@@ -46,7 +45,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
       "response_status":
       {
         "success": "true/false",
-        "message": "string"
+        "status_message": "string"
       },
       "transactions": [
         {
@@ -77,7 +76,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
       "response_status":
       {
         "success": "true/false",
-        "message": "string"
+        "status_message": "string"
       }
     }
 - **Description**

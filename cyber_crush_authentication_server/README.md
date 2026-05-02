@@ -27,7 +27,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
       "response_status": 
       {
         "success": "true/false",
-        "message": "string"
+        "status_message": "string"
       },
       "token": "string (if success)"
     }
@@ -47,7 +47,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
       "response_status": 
       {
         "success": "true/false",
-        "message": "string"
+        "status_message": "string"
       }
     }
 - **Description**

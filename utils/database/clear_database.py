@@ -30,7 +30,7 @@ def clear_database(db_connection):
             print("No tables found in database.")
         else:
             for (table,) in tables:
-                print(f"ropping table: {table}")
+                print(f"dropping table: {table}")
                 db_cursor.execute(f"DROP TABLE IF EXISTS {table} CASCADE;")
                 db_connection.commit()
 

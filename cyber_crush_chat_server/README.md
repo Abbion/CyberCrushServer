@@ -26,7 +26,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
     "response_status": 
     {
       "success": "true/false",
-      "message": "string"
+      "status_message": "string"
     },
     "direct_chats": [
       {
@@ -47,7 +47,8 @@ This server connects to a PostgreSQL database and requires proper configuration 
   }
 - **Description**
     - Returns `true` status with the user's chats. Each chat prvides the chat id, which can be used for future reqests.
-    - Returns `false` status with an error if a server error occurs.
+    - Returns `false` status with a message if a server error occurs.
+
 ---
 ###  **POST** `/get_chat_history`
 - **Input**
@@ -63,7 +64,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
     "response_status": 
     {
       "success": "true/false",
-      "message": "string"
+      "status_message": "string"
     },
     "messages": [
       {
@@ -76,6 +77,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Description**
     - Returns `true` status with the last 50 messages that were send until the `history_time_stamp` in request. If the `history_time_stamp` is `Null` the latest 50 messages will be returned.
     - Returns `false` status wth an error if a server error occurs.
+
 ---
 ### **POST** `/get_chat_metadata`
 - **Input**
@@ -90,7 +92,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
     "response_status": 
     {
       "success": "true/false",
-      "message": "string"
+      "status_message": "string"
     },
     "metadata": "Option<ChatMetaData>"
   }
@@ -119,6 +121,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
 - **Description**
     - Returns `true` state with direct chat metadata or group chat medatada.
     - Returns `false` state with an error if chat does not exist or an server error occurs.
+
 ---
 ### **POST** `/update_group_chat_member`
 - **Input**
@@ -137,12 +140,13 @@ This server connects to a PostgreSQL database and requires proper configuration 
     "response_status": 
     {
       "success": "true/false",
-      "message": "string"
+      "status_message": "string"
     }
   }
 - **Description**
     - Returns `true` status when update request is finalized.
     - Returns `false` status with an error if chat does not exist or an server error occurs.
+
 ---
 ### **POST** `/create_new_direct_chat`
 - **Input**
@@ -158,13 +162,14 @@ This server connects to a PostgreSQL database and requires proper configuration 
     "response_status": 
     {
       "success": "true/false",
-      "message": "string"
+      "status_message": "string"
     },
     "chat_id": "Option<i32>"
   }
 - **Description**
     - Returns `true` status with an new direct chat id.
     - Returns `false` status with an error if an server error occurs.
+
 ---
 ### **POST** `/create_new_group_chat`
 - **INPUT**
@@ -179,13 +184,14 @@ This server connects to a PostgreSQL database and requires proper configuration 
     "response_status": 
     {
       "success": "true/false",
-      "message": "string"
+      "status_message": "string"
     },
     "chat_id": "Option<i32>"
   }
 - **Description**
     - Returns `true` status with an new group chat id.
     - Returns `false` status with an error if an server error occurs.
+
 ---
 ### **GET** `/realtime_chat`
 - **Description**
@@ -198,4 +204,3 @@ This server connects to a PostgreSQL database and requires proper configuration 
 
 - **Input**
     None
----

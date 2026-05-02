@@ -9,7 +9,6 @@ The game state server informs about the state of the game by provideing a game s
 - **Use case:** Simple ping to check if the server is running.
 
 ---
-
 ### **GET** `/game_state`
 - **Output**
     ```json
