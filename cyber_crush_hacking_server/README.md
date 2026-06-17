@@ -98,7 +98,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
     - Returns `false` status with a message if a server error occurs.
 
 ---
-### **POST** `/get_available_hack_types`
+### **POST** `/get_hack_token`
 - **Input**
   ```json
   {
@@ -120,7 +120,7 @@ This server connects to a PostgreSQL database and requires proper configuration 
     - Returns `false` status with a message if a server error occurs.
 
 ---
-### **POST** `/get_available_hack_types`
+### **POST** `/log_hack_state_result`
 - **Input**
   ```json
   {
@@ -131,11 +131,11 @@ This server connects to a PostgreSQL database and requires proper configuration 
   }
   HackType
   [
-    "PersonalData"/
-    "ChatAccess"/
+    "PersonalData" or
+    "ChatAccess" or
     {
       "ChatData": 0
-    }/
+    } or
     {
       "BankTransaction": 0
     }
