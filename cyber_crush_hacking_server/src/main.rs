@@ -200,6 +200,33 @@ async fn get_available_hack_types(State(state): State<Arc<ServerState>>, Json(pa
         return Json(AvailableHackTypesResponse{ response_status: ResponseStatus::fail("Victim personal code is not valid. Cannot gather available hacks.".into()), available_hacks: vec![] });
     }
 
+    let users_exist_query_result = sqlx::query_scalar::<_, i64>(
+    r#"
+        SELECT COUNT(*)
+        FROM users hacker
+        CROSS JOIN users victim
+        WHERE hacker.personal_number = $1
+            AND victim.personal_number = $2
+            AND hacker.can_hack = true
+    "#
+    )
+    .bind(&hacker_personal_number)
+    .bind(&victim_personal_number)
+    .fetch_one(&state.db_pool)
+    .await;
+
+    match users_exist_query_result {
+        Ok(1) => { /*Everything is ok. Continue*/ },
+        Ok(count) => {
+            eprintln!("Failed to query user existance for: {} - {}, wrong count number: {}", hacker_personal_number, victim_personal_number, count);
+            return Json(AvailableHackTypesResponse{ response_status: ResponseStatus::fail("Querying available hacks failed. Internal server error 1.".into()), available_hacks: vec![] });
+        },
+        Err(error) => {
+            eprintln!("Failed to query user existance for: {} - {}, error: {}", hacker_personal_number, victim_personal_number, error);
+            return Json(AvailableHackTypesResponse{ response_status: ResponseStatus::fail("Querying available hacks failed. Internal server error 2.".into()), available_hacks: vec![] });
+        }
+    }
+
     let query_result = sqlx::query_as::<_, HackQueryResult>(
     r#"
         SELECT
@@ -209,7 +236,7 @@ async fn get_available_hack_types(State(state): State<Arc<ServerState>>, Json(pa
         INNER JOIN users hacker ON hl.hacker_id = hacker.id
         INNER JOIN users victim ON hl.victim_id = victim.id
         WHERE hacker.personal_number = $1
-            AND victim.personal_number = $2;
+            AND victim.personal_number = $2
     "#
     )
     .bind(&hacker_personal_number)
@@ -221,7 +248,7 @@ async fn get_available_hack_types(State(state): State<Arc<ServerState>>, Json(pa
         Ok(hacks) => hacks,
         Err(error) => {
             eprintln!("Failed to query hacker available hacks for: {}, error: {}", hacker_personal_number, error);
-            return Json(AvailableHackTypesResponse{ response_status: ResponseStatus::fail("Querying available hacks failed. Internal server error.".into()), available_hacks: vec![] });
+            return Json(AvailableHackTypesResponse{ response_status: ResponseStatus::fail("Querying available hacks failed. Internal server error 3.".into()), available_hacks: vec![] });
         }
     };
 

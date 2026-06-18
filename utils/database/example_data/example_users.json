@@ -193,6 +193,7 @@
         "password" : "Google1Pass!",
 	"can_publish_posts": true,
 	"cyber_defence_level": 3,
+	"can_hack": false,
         "extra_data" : {
 	    "race" : "orc",
 	    "job" : "repair technicaian",
@@ -206,6 +207,7 @@
         "password" : "Google2Pass!",
 	"can_publish_posts": false,
 	"cyber_defence_level": 1,
+	"can_hack": false,
         "extra_data" : {
 	    "race" : "elf",
 	    "job" : "music artist",
@@ -219,6 +221,7 @@
         "password" : "Apple1Pass!",
 	"can_publish_posts": true,
 	"cyber_defence_level": 3,
+	"can_hack": false,
         "extra_data" : {
 	    "race" : "orc",
 	    "job" : "repair technicaian",
@@ -232,6 +235,7 @@
         "password" : "Apple2Pass!",
 	"can_publish_posts": false,
 	"cyber_defence_level": 1,
+	"can_hack": false,
         "extra_data" : {
 	    "race" : "elf",
 	    "job" : "music artist",
