@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game state manager</title>
+<style>
+    body { font-family: system-ui, sans-serif; max-width: 480px; margin: 2rem auto; padding: 0 1rem; background: #111; color: #eee; }
+    h1 { font-size: 1.3rem; }
+    .box { border: 1px solid #444; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
+    .status { font-weight: bold; }
+    .online { color: #4ade80; }
+    .offline { color: #f87171; }
+    button { padding: .5rem 1rem; margin-right: .5rem; border: 0; border-radius: 4px; background: #facc15; cursor: pointer; font-weight: bold; }
+    input { width: 100%; box-sizing: border-box; padding: .5rem; margin: .5rem 0; }
+    #error { color: #f87171; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<h1>Game state manager</h1>
+
+<div class="box">
+    <p>Current game state: <span id="state" class="status">...</span></p>
+    <button onclick="update({ is_game_online: true })">Online</button>
+    <button onclick="update({ is_game_online: false })">Offline</button>
+</div>
+
+<div class="box">
+    <p>Current offline message: <code id="message">...</code></p>
+    <input id="custom" placeholder="Custom offline message">
+    <button onclick="saveCustom()">Save custom</button>
+    <button onclick="update({ info_panel_text: '#TR-GAME_IS_OFFLINE' })">Default</button>
+</div>
+
+<div id="error"></div>
+
+<script>
+    const errorBox = document.getElementById("error");
+
+    function render(data) {
+        const state = document.getElementById("state");
+        state.textContent = data.is_game_online ? "Online" : "Offline";
+        state.className = "status " + (data.is_game_online ? "online" : "offline");
+        document.getElementById("message").textContent = data.info_panel_text;
+    }
+
+    async function refresh() {
+        try {
+            const response = await fetch("/game_state");
+            render(await response.json());
+            errorBox.textContent = "";
+        } catch (error) {
+            errorBox.textContent = "Cannot reach server: " + error;
+        }
+    }
+
+    async function update(change) {
+        try {
+            const response = await fetch("/admin/game_state", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(change),
+            });
+            if (!response.ok) {
+                errorBox.textContent = "Update failed: " + response.status;
+                return;
+            }
+            render(await response.json());
+            errorBox.textContent = "";
+        } catch (error) {
+            errorBox.textContent = "Cannot reach server: " + error;
+        }
+    }
+
+    function saveCustom() {
+        const text = document.getElementById("custom").value.trim();
+        if (text) {
+            update({ info_panel_text: text });
+            document.getElementById("custom").value = "";
+        }
+    }
+
+    refresh();
+    setInterval(refresh, 3000);
+</script>
+</body>
+</html>

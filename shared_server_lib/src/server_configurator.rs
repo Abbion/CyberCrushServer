@@ -9,6 +9,10 @@ pub struct ServerConfiguration {
     database_admin_password: String,
     database_url: String,
     pub database_password_pepper: String,
+    #[serde(default)]
+    pub admin_username: String,
+    #[serde(default)]
+    pub admin_password: String,
     server_address: String,
     authentication_server_port: u16,
     data_server_port: u16,

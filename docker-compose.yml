@@ -1,0 +1,135 @@
+# Start everything: docker compose up --build
+# Start with example data: LOAD_EXAMPLE_DATA=true docker compose up --build
+# Override a host port if it is taken, e.g. AUTHENTICATION_HOST_PORT=3010 (container ports stay the same).
+# Credentials below must match server.docker.conf.
+x-server: &server
+  restart: unless-stopped
+  depends_on:
+    db_init:
+      condition: service_completed_successfully
+  volumes:
+    - ./server.docker.conf:/app/server.conf:ro
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cc_database
+      POSTGRES_USER: kijanka_tu_byla
+      POSTGRES_PASSWORD: "W@n!l!0we_l1lje"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kijanka_tu_byla -d cc_database"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  db_init:
+    build:
+      context: .
+      dockerfile: docker/db_init.Dockerfile
+    environment:
+      LOAD_EXAMPLE_DATA: ${LOAD_EXAMPLE_DATA:-false}
+    volumes:
+      - ./server.docker.conf:/app/server.conf:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  authentication_server:
+    <<: *server
+    build:
+      context: .
+      args:
+        SERVER: cyber_crush_authentication_server
+    ports:
+      - "${AUTHENTICATION_HOST_PORT:-3000}:3000"
+
+  data_server:
+    <<: *server
+    build:
+      context: .
+      args:
+        SERVER: cyber_crush_data_server
+    ports:
+      - "${DATA_HOST_PORT:-3001}:3001"
+
+  bank_server:
+    <<: *server
+    build:
+      context: .
+      args:
+        SERVER: cyber_crush_bank_server
+    ports:
+      - "${BANK_HOST_PORT:-3002}:3002"
+
+  chat_server:
+    <<: *server
+    build:
+      context: .
+      args:
+        SERVER: cyber_crush_chat_server
+    ports:
+      - "${CHAT_HOST_PORT:-3003}:3003"
+
+  news_server:
+    <<: *server
+    build:
+      context: .
+      args:
+        SERVER: cyber_crush_news_server
+    ports:
+      - "${NEWS_HOST_PORT:-3004}:3004"
+
+  game_state_server:
+    <<: *server
+    build:
+      context: .
+      args:
+        SERVER: cyber_crush_game_state_server
+    ports:
+      - "${GAME_STATE_HOST_PORT:-3005}:3005"
+
+  hacking_server:
+    <<: *server
+    build:
+      context: .
+      args:
+        SERVER: cyber_crush_hacking_server
+    ports:
+      - "${HACKING_HOST_PORT:-3006}:3006"
+
+  logs_viewer:
+    image: amir20/dozzle:latest
+    restart: unless-stopped
+    environment:
+      DOZZLE_FILTER: label=com.docker.compose.project=${COMPOSE_PROJECT_NAME:-cybercrushserver}
+      DOZZLE_NO_ANALYTICS: "true"
+    ports:
+      - "${LOGS_VIEWER_HOST_PORT:-8080}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - dozzle_data:/data
+
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - authentication_server
+      - data_server
+      - bank_server
+      - chat_server
+      - news_server
+      - game_state_server
+      - hacking_server
+      - logs_viewer
+    ports:
+      - "${PROXY_HOST_PORT:-80}:80"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+
+volumes:
+  db_data:
+  dozzle_data:
