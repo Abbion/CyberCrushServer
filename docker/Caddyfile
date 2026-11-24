@@ -1,0 +1,30 @@
+# Routes http://<name>.cybercrush.localhost to the matching server container.
+# *.localhost names resolve to this machine automatically, no /etc/hosts edit needed.
+{
+	auto_https off
+}
+
+http://auth.cybercrush.localhost {
+	reverse_proxy authentication_server:3000
+}
+http://data.cybercrush.localhost {
+	reverse_proxy data_server:3001
+}
+http://bank.cybercrush.localhost {
+	reverse_proxy bank_server:3002
+}
+http://chat.cybercrush.localhost {
+	reverse_proxy chat_server:3003
+}
+http://news.cybercrush.localhost {
+	reverse_proxy news_server:3004
+}
+http://game-state.cybercrush.localhost {
+	reverse_proxy game_state_server:3005
+}
+http://hacking.cybercrush.localhost {
+	reverse_proxy hacking_server:3006
+}
+http://logs.cybercrush.localhost {
+	reverse_proxy logs_viewer:8080
+}

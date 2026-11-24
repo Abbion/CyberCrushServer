@@ -481,6 +481,7 @@ name = "cyber_crush_game_state_server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
  "crossterm",
  "ratatui",
  "serde",

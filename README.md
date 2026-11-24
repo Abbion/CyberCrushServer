@@ -14,6 +14,42 @@ Each feature is supported by its own dedicated server:
  - News feed
  - Direct messaging and group messaging
 
+## Quick start with Docker (for frontend developers)
+You only need [Docker](https://docs.docker.com/get-docker/) (Docker Desktop on Windows/Mac). No Rust, Python or Postgres required.
+
+```bash
+./setup.sh
+```
+
+On Windows, run it from WSL or Git Bash. The first run takes a few minutes. It builds the servers, creates the database, loads example data and prints the address of every server. If a default port is busy, the script picks a free one and tells you.
+
+Logs from all servers are shown in your browser at the `logs_viewer` address that the script prints (default http://localhost:8080).
+
+### Server addresses (local hostnames)
+Instead of remembering ports, use these names. They work in a browser, in `curl`, and in frontend code:
+
+| Server | Address | Direct port |
+|---|---|---|
+| Authentication | http://auth.cybercrush.localhost | 3000 |
+| Data | http://data.cybercrush.localhost | 3001 |
+| Bank | http://bank.cybercrush.localhost | 3002 |
+| Chat (REST and WebSocket) | http://chat.cybercrush.localhost | 3003 |
+| News | http://news.cybercrush.localhost | 3004 |
+| Game state | http://game-state.cybercrush.localhost | 3005 |
+| Hacking | http://hacking.cybercrush.localhost | 3006 |
+| Log viewer | http://logs.cybercrush.localhost | 8080 |
+
+Example: `curl http://game-state.cybercrush.localhost/game_state`. For WebSockets use `ws://chat.cybercrush.localhost/...`.
+
+- **How it works:** a small proxy container (Caddy, configured in `docker/Caddyfile`) listens on port 80 and forwards each name to the right server. Names ending in `.localhost` point to your own computer automatically, so you do not need to edit any file.
+- **If a name does not resolve** (some older tools or Windows setups), add this line to your hosts file (`/etc/hosts` on Linux/Mac, `C:\Windows\System32\drivers\etc\hosts` on Windows):
+  `127.0.0.1 auth.cybercrush.localhost data.cybercrush.localhost bank.cybercrush.localhost chat.cybercrush.localhost news.cybercrush.localhost game-state.cybercrush.localhost hacking.cybercrush.localhost logs.cybercrush.localhost`
+- **If port 80 is busy**, `./setup.sh` picks another proxy port (for example 180) and prints the exact addresses, like `http://auth.cybercrush.localhost:180`.
+- **Phone or another computer:** it cannot resolve `.localhost`. Use `http://<your computer's IP>:<direct port>`. The script prints your IP. The direct ports (the last column) always work.
+- **Adding a server:** add a block to `docker/Caddyfile` and restart with `docker compose restart proxy`.
+
+Other commands: `./setup.sh stop`, `./setup.sh status`, `./setup.sh logs`, and `./setup.sh reset` (deletes all data and starts fresh).
+
 ## Build and run
 #### Prerequisites
 Make sure you have all of these tools installed:
@@ -48,7 +84,6 @@ All the README and UML files will be frquently updated to reflect the present pr
 
 #### Future features
  - A setup script will be provided that handles the whole backend setup.
- - Docker setup.
 
 
 
